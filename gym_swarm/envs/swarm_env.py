@@ -2,9 +2,8 @@ import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
 
-import random
-import itertools
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class SwarmEnv(gym.Env):
@@ -23,6 +22,7 @@ class SwarmEnv(gym.Env):
 
         self.random_placement = True
         self.done = None
+        self.goal_state = None
 
     def step(self, action):
         """
@@ -44,21 +44,26 @@ class SwarmEnv(gym.Env):
 
         info = None
 
-        move = action_to_move[action]
+        move = {}
+        for key in action.keys():
+            move[key] = action_to_move[action[key]]
 
-        if self.move_allowed(move):
-            disk_to_move = min(self.disks_on_peg(move[0]))
-            moved_state = list(self.current_state)
-            moved_state[disk_to_move] = move[1]
-            self.current_state = tuple(moved_state)
-        else:
-            info["invalid_action"] = True
+        # Asynchronous execution of moves - if collision random move instead
+        # Implement border conditions - agent enter at opposite ends again
+        for i in self.current_state.keys():
+            temp = self.current_state[i] + move[i]
+            # x-Axis turnover
+            if temp[0] > (self.obs_space_size - 1):
+                temp[0] -= 0
+            elif temp[0] < 0:
+                temp[0] = self.obs_space_size - 1
+            # y-Axis turnover
+            if temp[1] > (self.obs_space_size - 1):
+                temp[1] -= 0
+            elif temp[1] < 0:
+                temp[1] = self.obs_space_size - 1
 
-        if self.current_state == self.goal_state:
-            reward = 100
-            self.done = True
-        else:
-            reward = 0
+        reward = self.swarm_reward()
 
         return self.current_state, reward, self.done, info
 
@@ -70,8 +75,9 @@ class SwarmEnv(gym.Env):
             invalid, state_overlap = self.invalid_position(states_temp)
 
             while invalid:
-                invalid, state_overlap = self.invalid_position(states_temp)
-                states_temp
+                invalid = self.invalid_position(states_temp)
+                states_temp = np.random.randint(self.obs_space_size,
+                                                size=(2, self.num_agents))
 
         # Transform valid state array into dictionary
         self.current_state = dict(enumerate(states_temp.T))
@@ -88,23 +94,34 @@ class SwarmEnv(gym.Env):
                     state_overlap[j, i] = 1
 
         if np.sum(state_overlap) == 0:
-            return False, state_overlap
+            return False
         else:
-            return True, state_overlap
+            return True
 
-    def render(self, mode='human', close=False):
+    def swarm_reward():
+        return 0
+
+    def border_dynamics():
         return
 
-    def set_env_parameters(self, num_disks=4, env_noise=0, verbose=True):
-        self.num_disks = num_disks
-        self.env_noise = env_noise
-        self.observation_space = spaces.Tuple(self.num_disks*(spaces.Discrete(3),))
-        self.goal_state = self.num_disks*(2,)
+    def render(self, mode='human', close=False):
+        fig, ax = plt.subplots()
+        ax.imshow(self.observation_space)
+
+        for i in range(self.num_agents):
+
+        return
+
+    def set_env_parameters(self, num_agents=4,
+                           obs_space_size=20, verbose=True):
+        self.num_agents = num_disks
+        self.obs_space_size = obs_space_size
 
         if verbose:
-            print("Hanoi Environment Parameters have been set to:")
-            print("\t Number of Disks: {}".format(self.num_disks))
-            print("\t Transition Failure Probability: {}".format(self.env_noise))
+            print("Swarm Environment Parameters have been set to:")
+            print("\t Number of Agents: {}".format(self.num_agents))
+            print("\t State Space: {}x{} Grid".format(self.obs_space_size,
+                                                      self.obs_space_size))
 
 
 action_to_move = {0: np.array([-1, 0]),
