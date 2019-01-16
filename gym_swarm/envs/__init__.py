@@ -1,1 +1,1 @@
-from gym_hanoi.envs.hanoi_env import HanoiEnv
+from gym_hanoi.envs.swarm_env import SwarmEnv
