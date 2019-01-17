@@ -60,8 +60,9 @@ class SwarmEnv(gym.Env):
         for i in self.current_state.keys():
             states_temp[i] = self.step_agent(i, move[i])
             # Check for collision with previous movers
+            print(i, states_temp)
             if i > 0:
-                while self.invalid_position(states_temp, i+1):
+                while self.invalid_position(np.array([states_temp[state] for state in states_temp]).T, i+1):
                     random_action = np.random.randint(8, size=1)
                     states_temp[i] = self.step_agent(i, action_to_move[random_action])
 
@@ -74,7 +75,6 @@ class SwarmEnv(gym.Env):
             # For each agent sample an initial placement in grid - uniform!
             states_temp = np.random.randint(self.obs_space_size,
                                             size=(2, self.num_agents))
-
             invalid = self.invalid_position(states_temp, self.num_agents)
 
             while invalid:
@@ -117,10 +117,10 @@ class SwarmEnv(gym.Env):
             temp[1] = self.obs_space_size - 1
         return temp
 
-    def swarm_reward():
+    def swarm_reward(self):
         return 0
 
-    def border_dynamics():
+    def border_dynamics(self):
         return
 
     def render(self, mode='human', close=False):
@@ -135,7 +135,7 @@ class SwarmEnv(gym.Env):
         ax_width = ax.get_window_extent().width
         fig_width = fig.get_window_extent().width
         fig_height = fig.get_window_extent().height
-        fish_size = 0.25*ax_width/(fig_width*len(x))
+        fish_size = 0.25*ax_width/(fig_width*0.5*len(x))
         fish_axs = [None for i in range(len(x))]
 
         for i in range(len(x)):
@@ -145,12 +145,14 @@ class SwarmEnv(gym.Env):
                                         fish_size, fish_size], anchor='C')
             fish_axs[i].imshow(fish_img)
             fish_axs[i].axis("off")
-
+        plt.setp(ax.get_xticklabels(), visible=False)
+        plt.setp(ax.get_yticklabels(), visible=False)
+        ax.tick_params(axis='both', which='both', length=0)
         plt.show()
 
     def set_env_parameters(self, num_agents=4,
                            obs_space_size=20, verbose=True):
-        self.num_agents = num_disks
+        self.num_agents = num_agents
         self.obs_space_size = obs_space_size
 
         if verbose:
