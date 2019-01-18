@@ -17,7 +17,7 @@ class Environment(unittest.TestCase):
         env = gym.make("Swarm-v0")
         env.reset()
         state, reward, done, info = env.step(0)
-        self.assertEqual(len(state), 4)
+        self.assertEqual(len(state), env.num_agents)
         self.assertEqual(env.env_noise, 0)
 
 

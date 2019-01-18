@@ -5,13 +5,21 @@ from gym.utils import seeding
 import os
 import numpy as np
 
-from scipy import ndimage, misc
+from scipy import ndimage
 import matplotlib.pyplot as plt
 from matplotlib.cbook import get_sample_data
 
+from sklearn.neighbors import NearestNeighbors
+
 dir_path = os.path.dirname(os.path.realpath(__file__))
+
+# Read in fish and predator emojis to plot episodes
 fish_img = plt.imread(get_sample_data(dir_path + "/images/fish_tropical.png"))
+predator_img = plt.imread(get_sample_data(dir_path + "/images/predator_shark.png"))
+
 fish_inv_img = np.flip(fish_img, axis=1)
+predator_inv_img = np.flip(predator_img, axis=1)
+
 fish_imgs = {0: fish_img,
              1: ndimage.rotate(fish_img, 45)[33:193, 33:193, :],
              2: ndimage.rotate(fish_img, 90),
@@ -20,6 +28,64 @@ fish_imgs = {0: fish_img,
              5: ndimage.rotate(fish_inv_img, 45)[33:193, 33:193, :],
              6: ndimage.rotate(fish_img, -90),
              7: ndimage.rotate(fish_img, -45)[33:193, 33:193, :]}
+
+predator_imgs = {0: predator_img,
+                 1: ndimage.rotate(predator_img, 45)[33:193, 33:193, :],
+                 2: ndimage.rotate(predator_img, 90),
+                 3: ndimage.rotate(predator_inv_img, -45)[33:193, 33:193, :],
+                 4: ndimage.rotate(predator_inv_img, 0),
+                 5: ndimage.rotate(predator_inv_img, 45)[33:193, 33:193, :],
+                 6: ndimage.rotate(predator_img, -90),
+                 7: ndimage.rotate(predator_img, -45)[33:193, 33:193, :]}
+
+
+def step_agent(agent_state, move_agent, obs_space_size):
+    temp = agent_state + move_agent
+    # x/y-Axis turnover - Periodic boundary conditions
+    for i in range(2):
+        if temp[i] > (obs_space_size - 1):
+            temp[i] = 0
+        elif temp[i] < 0:
+            temp[i] = obs_space_size - 1
+    return temp
+
+
+class Predator():
+    def __init__(self, agent_states, obs_space_size):
+        self.obs_space_size = obs_space_size
+        self.current_state = np.random.randint(obs_space_size, size=2)
+
+        overlaps = sum([np.array_equal(self.current_state,
+                                       agent_states[temp])
+                        for temp in agent_states])
+        while overlaps != 0:
+            self.current_state = np.random.randint(obs_space_size,
+                                                   size=2)
+
+    def closest_target(self, agent_states):
+        agent_states = np.array(list(agent_states.values()))
+        all_together = np.vstack((self.current_state, agent_states))
+        nbrs = NearestNeighbors(n_neighbors=2,
+                                algorithm='ball_tree').fit(all_together)
+        distances, indices = nbrs.kneighbors(all_together)
+        return indices[0, 1] - 1
+
+    def follow_target(self, agent_states):
+        target_agent = self.closest_target(agent_states)
+        move = self.current_state - agent_states[target_agent]
+
+        for i in range(2):
+            if move[i] > 1:
+                move[i] = 1
+            elif move[i] < -1:
+                move[i] = -1
+
+        for action, move_d in action_to_move.items():
+            if (move == move_d).all():
+                self.orientation = action
+
+        self.current_state = step_agent(self.current_state, move,
+                                        self.obs_space_size)
 
 
 class SwarmEnv(gym.Env):
@@ -42,24 +108,8 @@ class SwarmEnv(gym.Env):
         self.goal_state = None
 
     def step(self, action):
-        """
-        * Inputs:
-            - action: integer from 0 to 7 (see ACTION_LOOKUP)
-        * Outputs:
-            - current_state: dictionary of all agent states after transition
-            - reward: cumulative reward of complete state transition
-            - done: episode state
-            - info: dict of booleans (noisy?/invalid action?)
-        0. Check if transition is noisy or not
-        1. Transform action (0 to 7 integer) to tuple move - see Lookup
-        2. Check if move is allowed
-        3. If it is change corresponding entry | If not return same state
-        4. Check if episode completed and return
-        """
         if self.done:
             raise RuntimeError("Episode has finished. Call env.reset() to start a new episode.")
-
-        info = None
 
         move = {}
         for key in action.keys():
@@ -71,15 +121,22 @@ class SwarmEnv(gym.Env):
 
         states_temp = self.current_state.copy()
         for i in self.current_state.keys():
-            states_temp[i] = self.step_agent(i, move[i])
+            states_temp[i] = step_agent(self.current_state[i], move[i],
+                                        self.obs_space_size)
             # Check for collision with previous movers
             if i > 0:
                 while self.invalid_position(np.array([states_temp[state] for state in states_temp]).T, i+1):
-                    random_action = np.random.randint(8, size=1)
-                    states_temp[i] = self.step_agent(i, action_to_move[random_action])
+                    random_action = np.random.randint(8, size=1)[0]
+                    states_temp[i] = step_agent(self.current_state[i],
+                                                action_to_move[random_action],
+                                                self.obs_space_size)
 
-        reward = self.swarm_reward()
+        self.current_state = states_temp
+        self.predator.follow_target(self.current_state)
 
+        reward, self.done = self.swarm_reward()
+        info = {"predator_state": self.predator.current_state,
+                "predator_orientation": self.predator.orientation}
         return self.current_state, reward, self.done, info
 
     def reset(self):
@@ -96,6 +153,9 @@ class SwarmEnv(gym.Env):
 
         # Transform valid state array into dictionary
         self.current_state = dict(enumerate(states_temp.T))
+
+        self.predator = Predator(self.current_state,
+                                 self.obs_space_size)
         self.done = False
         return self.current_state
 
@@ -114,28 +174,16 @@ class SwarmEnv(gym.Env):
         else:
             return True
 
-    def step_agent(self, i, move_agent):
-        temp = self.current_state[i] + move_agent
-        # x-Axis turnover
-        if temp[0] > (self.obs_space_size - 1):
-            temp[0] -= 0
-        elif temp[0] < 0:
-            temp[0] = self.obs_space_size - 1
-        # y-Axis turnover
-        if temp[1] > (self.obs_space_size - 1):
-            temp[1] -= 0
-        elif temp[1] < 0:
-            temp[1] = self.obs_space_size - 1
-        print(temp)
-        return temp
-
     def swarm_reward(self):
-        return 0
+        if (self.current_state == self.predator.current_state).all():
+            reward = -100
+            done = True
+        else:
+            reward = 0
+            done = False
+        return reward, done
 
-    def border_dynamics(self):
-        return
-
-    def render(self, mode='human', close=False):
+    def render(self, mode='rgb_array', close=False):
         x = [self.current_state[state][0] for state in self.current_state]
         y = [self.current_state[state][1] for state in self.current_state]
 
@@ -147,8 +195,8 @@ class SwarmEnv(gym.Env):
         ax_width = ax.get_window_extent().width
         fig_width = fig.get_window_extent().width
         fig_height = fig.get_window_extent().height
-        fish_size = 0.25*ax_width/(fig_width*0.5*len(x))
-        fish_axs = [None for i in range(len(x))]
+        fish_size = 0.25*ax_width/(fig_width*len(x))
+        fish_axs = [None for i in range(len(x) + 1)]
 
         for i in range(len(x)):
             loc = ax.transData.transform((x[i], y[i]))
@@ -156,8 +204,20 @@ class SwarmEnv(gym.Env):
                                         loc[1]/fig_height-fish_size/2,
                                         fish_size, fish_size], anchor='C')
 
-            fish_axs[i].imshow(fish_imgs[self.orientation[i]])
+            fish_axs[i].imshow((fish_imgs[self.orientation[i]]*255).astype(np.uint8))
             fish_axs[i].axis("off")
+
+        # Add the predator as final axes object
+        loc = ax.transData.transform((self.predator.current_state[0],
+                                      self.predator.current_state[1]))
+        orientation = self.predator.orientation
+        fish_axs[len(x)] = fig.add_axes([loc[0]/fig_width-fish_size/2,
+                                         loc[1]/fig_height-fish_size/2,
+                                         fish_size, fish_size], anchor='C')
+
+        fish_axs[len(x)].imshow((predator_imgs[orientation]*255).astype(np.uint8))
+        fish_axs[len(x)].axis("off")
+
         plt.setp(ax.get_xticklabels(), visible=False)
         plt.setp(ax.get_yticklabels(), visible=False)
         ax.tick_params(axis='both', which='both', length=0)
@@ -193,12 +253,12 @@ ACTION_LOOKUP = {0: "left",
                  6: "up",
                  7: "left-up"}
 
-if __name__ == "__main__":
-    # Visualize all different agent orientations
-    plt.figure(figsize=(15, 12), dpi=200)
-    counter = 1
-    for key in fish_imgs.keys():
-        print(fish_imgs[key].shape)
-        plt.subplot(3, 3, counter)
-        plt.imshow(fish_imgs[key])
-        counter += 1
+# if __name__ == "__main__":
+#     # Visualize all different agent orientations
+#     plt.figure(figsize=(15, 12), dpi=200)
+#     counter = 1
+#     for key in fish_imgs.keys():
+#         print(fish_imgs[key].shape)
+#         plt.subplot(3, 3, counter)
+#         plt.imshow(fish_imgs[key])
+#         counter += 1
