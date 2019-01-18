@@ -62,18 +62,27 @@ class Predator():
             self.current_state = np.random.randint(obs_space_size,
                                                    size=2)
 
+        self.current_target = self.closest_target(agent_states)
+
     def closest_target(self, agent_states):
         agent_states = np.array(list(agent_states.values()))
         all_together = np.vstack((self.current_state, agent_states))
         nbrs = NearestNeighbors(n_neighbors=2,
                                 algorithm='ball_tree').fit(all_together)
         distances, indices = nbrs.kneighbors(all_together)
-        return indices[0, 1] - 1
+
+        if indices[0, 1] > 0:
+            target = indices[0, 1] - 1
+        else:
+            target = indices[0, 0] - 1
+        return target
 
     def follow_target(self, agent_states):
-        target_agent = self.closest_target(agent_states)
-        move = self.current_state - agent_states[target_agent]
 
+        roll = np.random.random()
+        if roll < 0.1:
+            self.current_target = self.closest_target(agent_states)
+        move = self.current_state - agent_states[self.current_target]
         for i in range(2):
             if move[i] > 1:
                 move[i] = 1
@@ -83,7 +92,6 @@ class Predator():
         for action, move_d in action_to_move.items():
             if (move == move_d).all():
                 self.orientation = action
-
         self.current_state = step_agent(self.current_state, move,
                                         self.obs_space_size)
 
@@ -175,7 +183,10 @@ class SwarmEnv(gym.Env):
             return True
 
     def swarm_reward(self):
-        if (self.current_state == self.predator.current_state).all():
+        overlaps = sum([np.array_equal(self.predator.current_state,
+                                       self.current_state[temp])
+                        for temp in self.current_state])
+        if overlaps > 0:
             reward = -100
             done = True
         else:
