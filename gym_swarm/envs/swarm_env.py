@@ -78,10 +78,10 @@ class Predator():
         return target
 
     def follow_target(self, agent_states):
-
         roll = np.random.random()
         if roll < 0.1:
             self.current_target = self.closest_target(agent_states)
+
         move = self.current_state - agent_states[self.current_target]
         for i in range(2):
             if move[i] > 1:
@@ -187,10 +187,24 @@ class SwarmEnv(gym.Env):
                                        self.current_state[temp])
                         for temp in self.current_state])
         if overlaps > 0:
-            reward = -100
+            reward = -100*self.num_agents
             done = True
         else:
             reward = 0
+            agent_states = np.array(list(self.current_state.values()))
+
+            nbrs = NearestNeighbors(n_neighbors=self.num_agents,
+                                    algorithm='ball_tree').fit(agent_states)
+            distances, indices = nbrs.kneighbors(agent_states)
+
+            for agent in range(self.num_agents):
+                # Attraction and repulsion objective - distances?
+                reward += -0.5 * sum(distances[agent, 1:] < 2*self.obs_space_size/10)
+                reward += -0.5 * sum(distances[agent, 1:] > 4*self.obs_space_size/10)
+
+            # Alignment - Sum of agents facing in the same direction
+            un, counts = np.unique(list(self.orientation), return_counts=True)
+            reward += np.max(counts)
             done = False
         return reward, done
 
