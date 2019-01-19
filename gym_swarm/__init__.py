@@ -7,3 +7,8 @@ register(
     id='Swarm-v0',
     entry_point='gym_hanoi.envs:SwarmEnv',
 )
+
+register(
+    id='Shepherd-v0',
+    entry_point='gym_hanoi.envs:ShepherdEnv',
+)

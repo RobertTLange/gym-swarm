@@ -6,10 +6,10 @@ import gym_swarm
 
 class Environment(unittest.TestCase):
 
-    def test_hanoi_env_make(self):
+    def test_swarm_env_make(self):
         gym.make("Swarm-v0")
 
-    def test_hanoi_env_reset(self):
+    def test_swarm_env_reset(self):
         env = gym.make("Swarm-v0")
         env.reset()
 

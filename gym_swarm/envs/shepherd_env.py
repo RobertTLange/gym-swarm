@@ -50,57 +50,7 @@ def step_agent(agent_state, move_agent, obs_space_size):
     return temp
 
 
-class Predator():
-    def __init__(self, agent_states, obs_space_size):
-        self.obs_space_size = obs_space_size
-        self.current_state = np.random.randint(obs_space_size, size=2)
-
-        overlaps = sum([np.array_equal(self.current_state,
-                                       agent_states[temp])
-                        for temp in agent_states])
-
-        while overlaps != 0:
-            self.current_state = np.random.randint(obs_space_size,
-                                                   size=2)
-            overlaps = sum([np.array_equal(self.current_state,
-                                           agent_states[temp])
-                            for temp in agent_states])
-
-        self.current_target = self.closest_target(agent_states)
-
-    def closest_target(self, agent_states):
-        agent_states = np.array(list(agent_states.values()))
-        all_together = np.vstack((self.current_state, agent_states))
-        nbrs = NearestNeighbors(n_neighbors=2,
-                                algorithm='ball_tree').fit(all_together)
-        distances, indices = nbrs.kneighbors(all_together)
-
-        if indices[0, 1] > 0:
-            target = indices[0, 1] - 1
-        else:
-            target = indices[0, 0] - 1
-        return target
-
-    def follow_target(self, agent_states):
-        roll = np.random.random()
-        if roll < 0.1:
-            self.current_target = self.closest_target(agent_states)
-
-        move = self.current_state - agent_states[self.current_target]
-        for i in range(2):
-            if move[i] > 1:
-                move[i] = 1
-            elif move[i] < -1:
-                move[i] = -1
-
-        for action, move_d in action_to_move.items():
-            if (move == move_d).all():
-                self.orientation = action
-        self.current_state = step_agent(self.current_state, move,
-                                        self.obs_space_size)
-
-
-class SwarmEnv(gym.Env):
+class ShepherdEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
@@ -165,9 +115,6 @@ class SwarmEnv(gym.Env):
 
         # Transform valid state array into dictionary
         self.current_state = dict(enumerate(states_temp.T))
-
-        self.predator = Predator(self.current_state,
-                                 self.obs_space_size)
         self.done = False
         return self.current_state
 
@@ -186,31 +133,9 @@ class SwarmEnv(gym.Env):
         else:
             return True
 
-    def swarm_reward(self):
-        overlaps = sum([np.array_equal(self.predator.current_state,
-                                       self.current_state[temp])
-                        for temp in self.current_state])
-        if overlaps > 0:
-            reward = -100*self.num_agents
-            done = True
-        else:
-            reward = 0
-            agent_states = np.array(list(self.current_state.values()))
-
-            nbrs = NearestNeighbors(n_neighbors=self.num_agents,
-                                    algorithm='ball_tree').fit(agent_states)
-            distances, indices = nbrs.kneighbors(agent_states)
-
-            for agent in range(self.num_agents):
-                # Repulsion objective - distances?
-                reward += -0.5 * sum(distances[agent, 1:] < 2*self.obs_space_size/10)
-                # Attraction objective
-                reward += -0.5 * sum(distances[agent, 1:] > 4*self.obs_space_size/10)
-
-            # Alignment - Sum of agents facing in the same direction
-            un, counts = np.unique(list(self.orientation), return_counts=True)
-            reward += np.max(counts)
-            done = False
+    def shepherd_reward(self):
+        reward = 0
+        done = False
         return reward, done
 
     def render(self, mode='rgb_array', close=False):
@@ -282,13 +207,3 @@ ACTION_LOOKUP = {0: "left",
                  5: "right-up",
                  6: "up",
                  7: "left-up"}
-
-# if __name__ == "__main__":
-#     # Visualize all different agent orientations
-#     plt.figure(figsize=(15, 12), dpi=200)
-#     counter = 1
-#     for key in fish_imgs.keys():
-#         print(fish_imgs[key].shape)
-#         plt.subplot(3, 3, counter)
-#         plt.imshow(fish_imgs[key])
-#         counter += 1
