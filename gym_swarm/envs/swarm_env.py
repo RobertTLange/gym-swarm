@@ -58,9 +58,13 @@ class Predator():
         overlaps = sum([np.array_equal(self.current_state,
                                        agent_states[temp])
                         for temp in agent_states])
+
         while overlaps != 0:
             self.current_state = np.random.randint(obs_space_size,
                                                    size=2)
+            overlaps = sum([np.array_equal(self.current_state,
+                                           agent_states[temp])
+                            for temp in agent_states])
 
         self.current_target = self.closest_target(agent_states)
 
@@ -170,6 +174,7 @@ class SwarmEnv(gym.Env):
     def invalid_position(self, states_temp, num_agents):
         state_overlap = np.zeros((num_agents, num_agents))
         for i in range(num_agents):
+            print(i)
             check_idx = np.where(state_overlap[i, :] == 0)[0]
             for j in range(len(check_idx)):
                 if np.array_equal(states_temp[:, i],
@@ -198,8 +203,9 @@ class SwarmEnv(gym.Env):
             distances, indices = nbrs.kneighbors(agent_states)
 
             for agent in range(self.num_agents):
-                # Attraction and repulsion objective - distances?
+                # Repulsion objective - distances?
                 reward += -0.5 * sum(distances[agent, 1:] < 2*self.obs_space_size/10)
+                # Attraction objective
                 reward += -0.5 * sum(distances[agent, 1:] > 4*self.obs_space_size/10)
 
             # Alignment - Sum of agents facing in the same direction
