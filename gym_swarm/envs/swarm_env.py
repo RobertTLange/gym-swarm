@@ -66,6 +66,7 @@ class Predator():
                                            agent_states[temp])
                             for temp in agent_states])
 
+        self.orientation = 0
         self.current_target = self.closest_target(agent_states)
 
     def closest_target(self, agent_states):
@@ -144,11 +145,13 @@ class SwarmEnv(gym.Env):
                                                 self.obs_space_size)
 
         self.current_state = states_temp
+        predator_state = self.predator.current_state.copy()
         self.predator.follow_target(self.current_state)
 
         reward, self.done = self.swarm_reward()
-        info = {"predator_state": self.predator.current_state,
-                "predator_orientation": self.predator.orientation}
+        info = {"predator_state": predator_state,
+                "predator_orientation": self.predator.orientation,
+                "predator_next_state": self.predator.current_state.copy()}
         return self.current_state, reward, self.done, info
 
     def reset(self):
@@ -191,7 +194,7 @@ class SwarmEnv(gym.Env):
                                        self.current_state[temp])
                         for temp in self.current_state])
         if overlaps > 0:
-            reward = -100*self.num_agents
+            reward = -10*self.num_agents
             done = True
         else:
             reward = 0
@@ -203,9 +206,9 @@ class SwarmEnv(gym.Env):
 
             for agent in range(self.num_agents):
                 # Repulsion objective - distances?
-                reward += -0.5 * sum(distances[agent, 1:] < 2*self.obs_space_size/10)
+                reward += 0.5 * sum(distances[agent, 1:] > 2*self.obs_space_size/10)
                 # Attraction objective
-                reward += -0.5 * sum(distances[agent, 1:] > 4*self.obs_space_size/10)
+                reward += 0.5 * sum(distances[agent, 1:] < 4*self.obs_space_size/10)
 
             # Alignment - Sum of agents facing in the same direction
             un, counts = np.unique(list(self.orientation), return_counts=True)
@@ -225,7 +228,8 @@ class SwarmEnv(gym.Env):
         ax_width = ax.get_window_extent().width
         fig_width = fig.get_window_extent().width
         fig_height = fig.get_window_extent().height
-        fish_size = 0.25*ax_width/(fig_width*len(x))
+        # fish_size = 0.25*ax_width/(fig_width*len(x))
+        fish_size = 0.008*self.obs_space_size
         fish_axs = [None for i in range(len(x) + 1)]
 
         for i in range(len(x)):
