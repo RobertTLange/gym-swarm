@@ -194,7 +194,7 @@ class SwarmEnv(gym.Env):
                                        self.current_state[temp])
                         for temp in self.current_state])
         if overlaps > 0:
-            reward = -10*self.num_agents
+            reward = -10
             done = True
         else:
             reward = 0
@@ -208,11 +208,11 @@ class SwarmEnv(gym.Env):
                 # Repulsion objective - distances?
                 reward += 0.5 * sum(distances[agent, 1:] > 2*self.obs_space_size/10)
                 # Attraction objective
-                reward += 0.5 * sum(distances[agent, 1:] < 4*self.obs_space_size/10)
-
+                reward -= 0.5 * sum(distances[agent, 1:] > 5*self.obs_space_size/10)
             # Alignment - Sum of agents facing in the same direction
             un, counts = np.unique(list(self.orientation), return_counts=True)
             reward += np.max(counts)
+            reward /= self.num_agents
             done = False
         return reward, done
 
