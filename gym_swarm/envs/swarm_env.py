@@ -9,7 +9,8 @@ from scipy import ndimage
 import matplotlib.pyplot as plt
 from matplotlib.cbook import get_sample_data
 
-from sklearn.neighbors import NearestNeighbors
+# from sklearn.neighbors import NearestNeighbors
+from sklearn.neighbors import DistanceMetric
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -72,14 +73,12 @@ class Predator():
     def closest_target(self, agent_states):
         agent_states = np.array(list(agent_states.values()))
         all_together = np.vstack((self.current_state, agent_states))
-        nbrs = NearestNeighbors(n_neighbors=2,
-                                algorithm='ball_tree').fit(all_together)
-        distances, indices = nbrs.kneighbors(all_together)
-
-        if indices[0, 1] > 0:
-            target = indices[0, 1] - 1
-        else:
-            target = indices[0, 0] - 1
+        # nbrs = NearestNeighbors(n_neighbors=2,
+        #                         algorithm='ball_tree').fit(all_together)
+        # distances, indices = nbrs.kneighbors(all_together)
+        dist = DistanceMetric.get_metric('manhattan')
+        distances = dist.pairwise(all_together)
+        target = int(np.partition(distances[0, :], 2)[2])
         return target
 
     def follow_target(self, agent_states):
@@ -115,10 +114,26 @@ class SwarmEnv(gym.Env):
         self.current_state = dict(zip(np.arange(self.num_agents),
                                       [np.empty(2)]*self.num_agents))
 
+        self.attraction_thresh = 5  # distance greater is undesirable
+        self.repulsion_thresh = 2  # distance smaller is undesirable
+        self.predator_eat_rew = -10  # reward when eaten by predator
+
         self.move = dict(enumerate(range(self.num_agents)))
         self.random_placement = True
         self.done = None
         self.goal_state = None
+
+    def set_reward_params(self, attraction_thresh,
+                          repulsion_thresh, predator_eat_rew,
+                          verbose=False):
+        self.attraction_thresh = attraction_thresh
+        self.repulsion_thresh = repulsion_thresh
+        self.predator_eat_rew = predator_eat_rew
+
+        if verbose:
+            print("Attraction Threshold: {}".format(self.attraction_thresh))
+            print("Repulsion Threshold: {}".format(self.repulsion_thresh))
+            print("Predator Punishment: {}".format(self.predator_eat_rew))
 
     def step(self, action):
         if self.done:
@@ -194,25 +209,24 @@ class SwarmEnv(gym.Env):
                                        self.current_state[temp])
                         for temp in self.current_state])
         if overlaps > 0:
-            reward = -10
+            reward = self.predator_eat_rew
             done = True
         else:
             reward = 0
             agent_states = np.array(list(self.current_state.values()))
-
-            nbrs = NearestNeighbors(n_neighbors=self.num_agents,
-                                    algorithm='ball_tree').fit(agent_states)
-            distances, indices = nbrs.kneighbors(agent_states)
+            dist = DistanceMetric.get_metric('manhattan')
+            distances = dist.pairwise(agent_states)
+            # distances, indices = nbrs.kneighbors(agent_states)
 
             for agent in range(self.num_agents):
-                # Repulsion objective - distances?
-                reward += 0.5 * sum(distances[agent, 1:] > 2*self.obs_space_size/10)
+                # Repulsion objective - distances? - Exclude agent himself
+                reward -= sum(distances[agent, :] < self.repulsion_thresh) - 1
                 # Attraction objective
-                reward -= 0.5 * sum(distances[agent, 1:] > 5*self.obs_space_size/10)
+                reward += sum(distances[agent, :] < self.attraction_thresh) - 1
             # Alignment - Sum of agents facing in the same direction
-            un, counts = np.unique(list(self.orientation), return_counts=True)
-            reward += np.max(counts)
-            reward /= self.num_agents
+            un, align = np.unique(list(self.orientation), return_counts=True)
+            reward += np.max(align)
+            reward /= 2*self.num_agents
             done = False
         return reward, done
 
