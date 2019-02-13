@@ -1,32 +1,46 @@
 # gym-swarm
 ## An OpenAI Gym Style Environment for Complex Swarm Behavior
 ## Author: Robert Tjarko Lange
-## Date: 09/2018
+## Date: February 2018
 
-This repository extends the OpenAI gym with two complex swarm environment.
+![](gym_swarm/images/env_illustration.png)
 
+## Action and State Space
 
-# 1. SwarmEnv:
-# 2. ShepherdEnv:
+The state space is defined to be a discrete grid of variable size. You can set the size of the grid (see below). Within this grid each agent has access to 8 different actions and can instantaneously move in any direction (l, l-u, l-d, r, r-u, r-d, d, u).
 
-## Action Space
-Each agent has access to 8 different actions
+Furthermore, the environment features a predator which initially computes its nearest neighbor (in terms of Manhattan Distance). This agent is assigned to be the target. Afterwards, the predator continually follows the chosen target. In 10 percent of the transitions the predator computes the nearest neighbor and updates its target.
 
-## State Space
+An episode ends once the predator collides with an agent.
 
+## Reward function
+
+The reward function is formalized by four objectives:
+
+![](gym_swarm/images/reward.png)
+
+You can set the attraction, repulsion thresholds as well as the predator collision reward. See below.
+
+## How to use this environment
 
 # Installation
 
 * Clone the repository and install the package.
 ```
 git clone https://github.com/RobertTLange/gym-swarm
-cd gym_hanoi
+cd gym-swarm
 pip install -e .  (if you use Python 2.)
 python setupy.py install  (if you use Python 3.)
 ```
 
-Depending on your operating system you might have to install mplcairo in order to render the nice fish! See [here](https://towardsdatascience.com/how-i-got-matplotlib-to-plot-apple-color-emojis-c983767b39e0) for a wonderful installation guide.
+# Usage
+
+Import and setup:
+![](gym_swarm/images/setup_env.png)
+
+Resetting the parameters of the environment:
+![](gym_swarm/images/set_params.png)
 
 # Notes
-* Environment is especially suited for prototyping solutions to communication problems.
+* Environment is especially suited for prototyping solutions to multi-agent RL problems which require communication.
 * Following format guide in https://github.com/openai/gym/tree/master/gym/envs#how-to-create-new-environments-for-gym.

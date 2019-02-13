@@ -78,7 +78,7 @@ class Predator():
         # distances, indices = nbrs.kneighbors(all_together)
         dist = DistanceMetric.get_metric('manhattan')
         distances = dist.pairwise(all_together)
-        target = int(np.partition(distances[0, :], 2)[2])
+        target = np.argsort(distances[0, :])[1] - 1
         return target
 
     def follow_target(self, agent_states):
@@ -122,18 +122,6 @@ class SwarmEnv(gym.Env):
         self.random_placement = True
         self.done = None
         self.goal_state = None
-
-    def set_reward_params(self, attraction_thresh,
-                          repulsion_thresh, predator_eat_rew,
-                          verbose=False):
-        self.attraction_thresh = attraction_thresh
-        self.repulsion_thresh = repulsion_thresh
-        self.predator_eat_rew = predator_eat_rew
-
-        if verbose:
-            print("Attraction Threshold: {}".format(self.attraction_thresh))
-            print("Repulsion Threshold: {}".format(self.repulsion_thresh))
-            print("Predator Punishment: {}".format(self.predator_eat_rew))
 
     def step(self, action):
         if self.done:
@@ -222,7 +210,9 @@ class SwarmEnv(gym.Env):
                 # Repulsion objective - distances? - Exclude agent himself
                 reward -= sum(distances[agent, :] < self.repulsion_thresh) - 1
                 # Attraction objective
-                reward += sum(distances[agent, :] < self.attraction_thresh) - 1
+                dist1 = (distances[agent, :] < self.attraction_thresh)
+                dist2 = (distances[agent, :] >= self.repulsion_thresh)
+                reward += (dist1 == dist2).sum()
             # Alignment - Sum of agents facing in the same direction
             un, align = np.unique(list(self.orientation), return_counts=True)
             reward += np.max(align)
@@ -281,6 +271,19 @@ class SwarmEnv(gym.Env):
             print("\t Number of Agents: {}".format(self.num_agents))
             print("\t State Space: {}x{} Grid".format(self.obs_space_size,
                                                       self.obs_space_size))
+
+    def set_reward_parameters(self, attraction_thresh,
+                              repulsion_thresh, predator_eat_rew,
+                              verbose=False):
+        self.attraction_thresh = attraction_thresh
+        self.repulsion_thresh = repulsion_thresh
+        self.predator_eat_rew = predator_eat_rew
+
+        if verbose:
+            print("Swarm Reward Parameters have been set to:")
+            print("\t Attraction Threshold: {}".format(self.attraction_thresh))
+            print("\t Repulsion Threshold: {}".format(self.repulsion_thresh))
+            print("\t Predator Punishment: {}".format(self.predator_eat_rew))
 
 
 action_to_move = {0: np.array([-1, 0]),
