@@ -5,10 +5,10 @@ logger = logging.getLogger(__name__)
 
 register(
     id='Swarm-v0',
-    entry_point='gym_hanoi.envs:SwarmEnv',
+    entry_point='gym_swarm.envs:SwarmEnv',
 )
 
 register(
     id='Shepherd-v0',
-    entry_point='gym_hanoi.envs:ShepherdEnv',
+    entry_point='gym_swarm.envs:ShepherdEnv',
 )
