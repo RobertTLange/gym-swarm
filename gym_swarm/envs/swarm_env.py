@@ -178,7 +178,8 @@ class SwarmEnv(gym.Env):
             while ch_id is not None:
                 states_temp[:, ch_id] = np.random.randint(self.obs_space_size,
                                                           size=(2, len(ch_id)))
-                ch_id = self.change_position_id(states_temp, self.num_agents)
+                ch_id = self.change_position_id(states_temp,
+                                                self.num_agents)
 
         # Transform valid state array into dictionary
         self.current_state = dict(enumerate(states_temp.T))
@@ -274,17 +275,19 @@ class SwarmEnv(gym.Env):
             dist = DistanceMetric.get_metric('chebyshev')
             distances = dist.pairwise(agent_states)
 
-            # TODO: Vectorize the reward computations
-            for agent in range(self.num_agents):
-                # Repulsion objective - Exclude agent himself
-                reward -= sum(distances[agent, :] < self.repulsion_thresh) - 1
-                # Attraction objective
-                dist1 = (distances[agent, :] < self.attraction_thresh)
-                dist2 = (distances[agent, :] >= self.repulsion_thresh)
-                reward += (dist1 == dist2).sum()
+            # Repulsion objective - Exclude agent themselves
+            reward -= (distances < self.repulsion_thresh).sum() - self.num_agents
+
+            # Attraction objective
+            dist1 = (distances < self.attraction_thresh)
+            dist2 = (distances >= self.repulsion_thresh)
+            reward += (dist1 == dist2).sum()
+
             # Alignment - Sum of agents facing in the same direction
             un, align = np.unique(list(self.orientation), return_counts=True)
             reward += np.max(align)
+
+            # Normalize by the number of agents (twice - symmetry)
             reward /= 2*self.num_agents
             done = False
         return reward, done
