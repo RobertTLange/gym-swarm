@@ -42,8 +42,8 @@ predator_imgs = {0: predator_img,
 
 def step_agent(agent_state, move_agent, obs_space_size):
     """
-    In: 2d-coords of agent in discrete grid, 2d-move, size of grid
-    Out: New state after transition and boundary check
+    In: 2d-coords of agent/predator in discrete grid, 2d-move, size of grid
+    Out: New state after transition and boundary check for single agent
     """
     temp = agent_state + move_agent
     # x/y-Axis turnover - Check periodic boundary conditions
@@ -56,6 +56,10 @@ def step_agent(agent_state, move_agent, obs_space_size):
 
 
 def step_all_agents(agent_states, moves, obs_space_size):
+    """
+    In: 2d-coords of all agents in discrete grid, 2d-move, size of grid
+    Out: New state after transition and boundary check for all agents
+    """
     states_temp = np.array([v for v in agent_states.values()]).T
     moves_temp = np.array([v for v in moves.values()]).T
     next_state_temp = states_temp + moves_temp
@@ -322,14 +326,17 @@ class SwarmEnv(gym.Env):
         """
         Render the environment state
         """
+        # Get agents state coordinates
         x = [self.current_state[state][0] for state in self.current_state]
         y = [self.current_state[state][1] for state in self.current_state]
 
+        # Plot the empty grid
         fig, ax = plt.subplots(dpi=200)
         x_ax = np.linspace(0, self.obs_space_size-1)
         y_ax = np.linspace(0, self.obs_space_size-1)
         plot = ax.plot(x_ax, y_ax, linestyle="")
 
+        # Define size of individual fish window in empty grid
         ax_width = ax.get_window_extent().width
         fig_width = fig.get_window_extent().width
         fig_height = fig.get_window_extent().height
@@ -337,6 +344,7 @@ class SwarmEnv(gym.Env):
         fish_size = 0.008*self.obs_space_size
         fish_axs = [None for i in range(len(x) + 1)]
 
+        # Loop over all agents and create windows for respective positions
         for i in range(len(x)):
             loc = ax.transData.transform((x[i], y[i]))
             fish_axs[i] = fig.add_axes([loc[0]/fig_width-fish_size/2,
@@ -380,13 +388,3 @@ ACTION_LOOKUP = {0: "left",
                  5: "right-up",
                  6: "up",
                  7: "left-up"}
-
-# if __name__ == "__main__":
-#     # Visualize all different agent orientations
-#     plt.figure(figsize=(15, 12), dpi=200)
-#     counter = 1
-#     for key in fish_imgs.keys():
-#         print(fish_imgs[key].shape)
-#         plt.subplot(3, 3, counter)
-#         plt.imshow(fish_imgs[key])
-#         counter += 1
