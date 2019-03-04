@@ -294,9 +294,8 @@ class SwarmEnv(gym.Env):
             move_array = np.array([m for m in self.move.values()])
             unalign = cosine_distances(move_array)/2
             # Get upper triangle set diag to 0, sum over all elements, subtract
-            temp = np.triu(unalign)
-            np.fill_diagonal(temp, 0)
-            reward -= np.max(temp)
+            np.fill_diagonal(unalign, 0)
+            reward -= np.max(unalign)
 
             # Normalize by the number of agents (twice - symmetry)
             reward /= 2*self.num_agents
