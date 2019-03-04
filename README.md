@@ -19,7 +19,7 @@ An episode ends once the predator collides with an agent.
 
 ![](gym_swarm/images/reward.png)
 
-You can set the attraction, repulsion thresholds as well as the predator collision reward. See below.
+You can set the attraction, repulsion thresholds as well as the predator collision reward. See below. Furthermore, instead of returning a single global reward, you can also return agent-specific rewards by providing the *indiv_rewards=True* option to the step function. This will return a dictionary of rewards.
 
 ## Scalability of the Environment
 
