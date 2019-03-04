@@ -4,8 +4,9 @@ from gym.utils import seeding
 
 import os
 import numpy as np
-
+from sklearn.metrics.pairwise import cosine_distances
 from scipy import ndimage
+
 import matplotlib.pyplot as plt
 from matplotlib.cbook import get_sample_data
 
@@ -187,6 +188,8 @@ class SwarmEnv(gym.Env):
 
         # Transform valid state array into dictionary
         self.current_state = dict(enumerate(states_temp.T))
+        # Initialize agents to be randomly oriented initially
+        self.orientation = dict(enumerate(np.random.randint(8, size=self.num_agents)))
         # Initialize the predator with the current initial state
         self.predator = Predator(self.current_state,
                                  self.obs_space_size)
@@ -204,7 +207,7 @@ class SwarmEnv(gym.Env):
         move = {}
         for key in action.keys():
             move[key] = action_to_move[action[key]]
-
+        self.move = move
         # Set orientation of agents to most recent action
         self.orientation = action
 
@@ -287,9 +290,13 @@ class SwarmEnv(gym.Env):
             dist2 = (distances >= self.repulsion_thresh)
             reward += (dist1 == dist2).sum()
 
-            # Alignment - Sum of agents facing in the same direction
-            un, align = np.unique(list(self.orientation), return_counts=True)
-            reward += np.max(align)
+            # Alignment - Cosine dissimilarity between all actions taken
+            move_array = np.array([m for m in self.move.values()])
+            unalign = cosine_distances(move_array)/2
+            # Get upper triangle set diag to 0, sum over all elements, subtract
+            temp = np.triu(unalign)
+            np.fill_diagonal(temp, 0)
+            reward -= np.max(temp)
 
             # Normalize by the number of agents (twice - symmetry)
             reward /= 2*self.num_agents

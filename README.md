@@ -17,11 +17,7 @@ An episode ends once the predator collides with an agent.
 
 ## Reward function
 
-The reward function is formalized by four objectives:
-
 ![](gym_swarm/images/reward.png)
-
-where d(.,.) denotes the Chebyshev distance.
 
 You can set the attraction, repulsion thresholds as well as the predator collision reward. See below.
 
@@ -53,9 +49,6 @@ Import and setup:
 
 Resetting the parameters of the environment:
 ![](gym_swarm/images/set_params.png)
-
-# TODO:
-    1. step function loops over all agents and checks for collisions. It might be more efficient to simply allow for collision between the fish/agent (also in the initialization) which is already punished by a repulsion reward. Would allow to vectorize the entire step over all agents.
 
 # Notes
 * Environment is especially suited for prototyping solutions to multi-agent RL problems which require communication.
