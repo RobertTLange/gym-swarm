@@ -196,7 +196,7 @@ class SwarmEnv(gym.Env):
         self.done = False
         return self.current_state
 
-    def step(self, action, indiv_rewards=False):
+    def step(self, action, indiv_rewards=False, vf_size=None):
         """
         Perform a state transition/reward calculation based on selected action
         """
@@ -229,7 +229,7 @@ class SwarmEnv(gym.Env):
         self.predator.follow_target(self.current_state)
 
         # Calculate the reward based on the transition and return meta info
-        reward, self.done = self.swarm_reward(indiv_rewards)
+        reward, self.done = self.swarm_reward(indiv_rewards, vf_size)
         info = {"predator_state": predator_state,
                 "predator_orientation": self.predator.orientation,
                 "predator_next_state": self.predator.current_state.copy()}
@@ -260,13 +260,15 @@ class SwarmEnv(gym.Env):
             # Return that overlap was detected
             return ch_id
 
-    def swarm_reward(self, indiv_rewards):
+    def swarm_reward(self, indiv_rewards, vf_size):
         """
         Compute the global swarm reward based on multiple objectives:
             1. Survival: Neg reinforcement for collision with predator
             2. Repulsion: Neg reinforcement for too close agents
             3. Attraction: Pos reinforcment for agents in correct range
             4. Alignment: Pos reinforcement for similar movement dir
+        -> indiv_rewards: returns a dictionary of agent-specific rewards
+        -> agents_in_vf: rewards computed based on receptive fields of agents
         """
         # Check if predator has "eaten" fish - terminate episode w neg reward
         overlaps = np.array([np.array_equal(self.predator.current_state,
@@ -278,7 +280,7 @@ class SwarmEnv(gym.Env):
 
             if indiv_rewards:
                 reward = dict(zip(range(self.num_agents), self.num_agents*[0]))
-                agent_id = np.argwhere(overlaps == 1)[0]
+                agent_id = np.argwhere(overlaps == 1)[0][0]
                 reward[agent_id] = self.predator_eat_rew
         else:
             reward = 0
@@ -300,7 +302,16 @@ class SwarmEnv(gym.Env):
             # Alignment - Cosine dissimilarity between all actions taken
             move_array = np.array([m for m in self.move.values()])
             unalign = cosine_distances(move_array)/2
-            # Get upper triangle set diag to 0, sum over all elements, subtract
+
+            if vf_size is not None:
+                """
+                If the rewards shall we constrained by the receptive field size
+                then given that delta_at <= vf_size we only need to change the
+                unalign negative reinforcement computation!
+                """
+                unalign[distances > vf_size] = 0
+
+            # Get upper triangle set diag to 0, sum over all elements, -
             np.fill_diagonal(unalign, 0)
             reward -= unalign.sum()
 
@@ -309,9 +320,12 @@ class SwarmEnv(gym.Env):
             done = False
 
             if indiv_rewards:
+                reward_global = reward
                 reward = dict(zip(range(self.num_agents), self.num_agents*[0]))
+                reward["global"] = reward_global
+
                 for agent_id in range(self.num_agents):
-                    reward[agent_id] -= repulsions[agent_id, :].sum()
+                    reward[agent_id] -= repulsions[agent_id, :].sum() - 1
                     reward[agent_id] += attractions[agent_id, :].sum()
                     reward[agent_id] -= unalign[agent_id, :].sum()
                     reward[agent_id] /= 2
