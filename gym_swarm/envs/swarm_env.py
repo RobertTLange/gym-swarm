@@ -115,8 +115,19 @@ class Predator():
         all_together = np.vstack((self.current_state, agent_states))
         dist = DistanceMetric.get_metric('chebyshev')
         distances = dist.pairwise(all_together)
-        target = np.argsort(distances[0, :])[1] - 1
-        return target
+
+        # Compute distances for two dirs (Periodic Boundary) - row 0 = pred
+        id_dist_1 = np.argsort(distances[0, :])[1]
+        id_dist_2 = np.flip(np.argsort(self.obs_space_size - distances[0, :]))[1]
+        print(distances[0, :])
+        if id_dist_1 == id_dist_2:
+            target_agent_id = id_dist_1
+        else:
+            d1 = distances[0, id_dist_1]
+            d2 = self.obs_space_size - distances[0, id_dist_2]
+            target_agent_id = id_dist_1 if d1 < d2 else id_dist_2
+        # Subtract one (since we included pred in dist calc) to get agent_id
+        return target_agent_id - 1
 
     def follow_target(self, agent_states):
         """
@@ -127,13 +138,16 @@ class Predator():
         if roll < 0.1:
             self.current_target = self.closest_target(agent_states)
 
-        move = self.current_state - agent_states[self.current_target]
-        for i in range(2):
-            if move[i] > 1:
-                move[i] = 1
-            elif move[i] < -1:
-                move[i] = -1
+        coord_dist = self.current_state - agent_states[self.current_target]
 
+        move = [0, 0]
+        for i in range(2):
+            if coord_dist[i] >= 1:
+                move[i] = -1
+            elif coord_dist[i] <= -1:
+                move[i] = 1
+
+        print(self.current_state, agent_states[self.current_target], move)
         for action, move_d in action_to_move.items():
             if (move == move_d).all():
                 self.orientation = action
@@ -282,6 +296,7 @@ class SwarmEnv(gym.Env):
                 reward = dict(zip(range(self.num_agents), self.num_agents*[0]))
                 agent_id = np.argwhere(overlaps == 1)[0][0]
                 reward[agent_id] = self.predator_eat_rew
+                reward["global"] = self.predator_eat_rew
         else:
             reward = 0
             # Cumulate rewards based on distance as well as alignment
@@ -388,6 +403,7 @@ class SwarmEnv(gym.Env):
 
             fish_axs[i].imshow((fish_imgs[self.orientation[i]]*255).astype(np.uint8))
             fish_axs[i].axis("off")
+            fish_axs[i].text(x[i], y[i], str(i+1), fontsize=10)
 
         # Add the predator as final axes object
         loc = ax.transData.transform((self.predator.current_state[0],
@@ -399,6 +415,10 @@ class SwarmEnv(gym.Env):
 
         fish_axs[len(x)].imshow((predator_imgs[orientation]*255).astype(np.uint8))
         fish_axs[len(x)].axis("off")
+        fish_axs[len(x)].text(self.predator.current_state[0],
+                              self.predator.current_state[1],
+                              "T: {}".format(self.predator.current_target + 1),
+                              fontsize=10)
 
         plt.setp(ax.get_xticklabels(), visible=False)
         plt.setp(ax.get_yticklabels(), visible=False)
