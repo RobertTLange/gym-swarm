@@ -119,7 +119,7 @@ class Predator():
         # Compute distances for two dirs (Periodic Boundary) - row 0 = pred
         id_dist_1 = np.argsort(distances[0, :])[1]
         id_dist_2 = np.flip(np.argsort(self.obs_space_size - distances[0, :]))[1]
-        print(distances[0, :])
+
         if id_dist_1 == id_dist_2:
             target_agent_id = id_dist_1
         else:
@@ -147,7 +147,6 @@ class Predator():
             elif coord_dist[i] <= -1:
                 move[i] = 1
 
-        print(self.current_state, agent_states[self.current_target], move)
         for action, move_d in action_to_move.items():
             if (move == move_d).all():
                 self.orientation = action
@@ -224,7 +223,6 @@ class SwarmEnv(gym.Env):
         self.move = move
         # Set orientation of agents to most recent action
         self.orientation = action
-
         states_temp = step_all_agents(self.current_state, move,
                                       self.obs_space_size)
 
@@ -232,9 +230,11 @@ class SwarmEnv(gym.Env):
 
         # Continue sampling new random initial state if overlap in states
         while ch_id is not None:
-            random_move = np.random.randint(8, size=(1, len(ch_id)))
-            states_temp[:, ch_id] = np.random.randint(self.obs_space_size,
-                                                      size=(2, len(ch_id)))
+            random_action = np.random.randint(8, size=(1, len(ch_id))).ravel()
+            for i, ch in enumerate(ch_id):
+                move[ch] = action_to_move[random_action[i]]
+            states_temp = step_all_agents(self.current_state, move,
+                                          self.obs_space_size)
             ch_id = self.change_position_id(states_temp, self.num_agents)
 
         # Update new state and perform a "follow-step" of the predator
@@ -302,17 +302,18 @@ class SwarmEnv(gym.Env):
             # Cumulate rewards based on distance as well as alignment
             agent_states = np.array(list(self.current_state.values()))
             dist = DistanceMetric.get_metric('chebyshev')
-            distances = dist.pairwise(agent_states)
+            dist_1 = dist.pairwise(agent_states)
+            dist_2 = self.obs_space_size - dist_1
 
             # Repulsion objective - Exclude agent themselves
-            repulsions = (distances < self.repulsion_thresh)
-            reward -= repulsions.sum() - self.num_agents
+            reps_1 = (dist_1 < self.repulsion_thresh)
+            reps_2 = (dist_2 < self.repulsion_thresh)
+            reward -= reps_1.sum() - self.num_agents + reps_2.sum()
 
             # Attraction objective
-            dist1 = (distances < self.attraction_thresh)
-            dist2 = (distances >= self.repulsion_thresh)
-            attractions = (dist1 == dist2)
-            reward += attractions.sum()
+            attr_1 = (dist_1 < self.attraction_thresh) == (dist_1 >= self.repulsion_thresh)
+            attr_2 =  (dist_2 < self.attraction_thresh) == (dist_2 >= self.repulsion_thresh)
+            reward += attr_1.sum() + attr_2.sum()
 
             # Alignment - Cosine dissimilarity between all actions taken
             move_array = np.array([m for m in self.move.values()])
@@ -320,18 +321,18 @@ class SwarmEnv(gym.Env):
 
             if vf_size is not None:
                 """
-                If the rewards shall we constrained by the receptive field size
+                If the rewards shall be constrained by the receptive field size
                 then given that delta_at <= vf_size we only need to change the
                 unalign negative reinforcement computation!
                 """
-                unalign[distances > vf_size] = 0
+                unalign[dist_1 > vf_size] = 0
 
             # Get upper triangle set diag to 0, sum over all elements, -
             np.fill_diagonal(unalign, 0)
             reward -= unalign.sum()
 
             # Normalize by the number of agents (twice - symmetry)
-            reward /= 2*self.num_agents
+            reward /= self.num_agents*(self.num_agents - 1)
             done = False
 
             if indiv_rewards:
@@ -340,10 +341,10 @@ class SwarmEnv(gym.Env):
                 reward["global"] = reward_global
 
                 for agent_id in range(self.num_agents):
-                    reward[agent_id] -= repulsions[agent_id, :].sum() - 1
-                    reward[agent_id] += attractions[agent_id, :].sum()
+                    reward[agent_id] -= reps_1[agent_id, :].sum() + reps_2[agent_id, :].sum() - 1
+                    reward[agent_id] += attr_1[agent_id, :].sum() + attr_2[agent_id, :].sum()
                     reward[agent_id] -= unalign[agent_id, :].sum()
-                    reward[agent_id] /= 2
+                    reward[agent_id] /= self.num_agents*(self.num_agents - 1)
         return reward, done
 
     def set_env_parameters(self, num_agents=4,
