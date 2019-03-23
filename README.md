@@ -3,6 +3,8 @@
 ## Author: Robert Tjarko Lange
 ## Date: February 2018
 
+In this repository we provide a first multi-agent reinforcement learning (MARL) that scales to a large number of agents and allows for efficient proto-typing of large-scale collective behavior. The environment is implemented in the classical OpenAI Gym style and allows for flexible reinforcement signal design.
+
 ![](gym_swarm/images/env_illustration.png)
 
 For a quick start intro view the [notebook](tryout_swarm_env.ipynb).
@@ -19,7 +21,7 @@ An episode ends once the predator collides with an agent.
 
 ![](gym_swarm/images/reward.png)
 
-You can set the attraction, repulsion thresholds as well as the predator collision reward. See below. Furthermore, instead of returning a single global reward, you can also return agent-specific rewards by providing the *indiv_rewards=True* option to the step function. This will return a dictionary of rewards.
+You can set the attraction, repulsion thresholds as well as the predator collision reward. See below. Furthermore, instead of returning a single global reward, you can also return agent-specific rewards by providing a specific *reward_type* dictionary to the *env.step()* function. This will return a dictionary of rewards with each agents credit to the global reward signal. Furthermore, you can specify a curriculum of the different normative reward constituents.
 
 ## Scalability of the Environment
 
@@ -44,11 +46,8 @@ python gym_swarm/tests/test.py
 
 # Usage
 
-Import and setup:
-![](gym_swarm/images/setup_env.png)
+Go [here](tryout_swarm_env.ipynb)!
 
-Resetting the parameters of the environment:
-![](gym_swarm/images/set_params.png)
 
 # Notes
 * Environment is especially suited for prototyping solutions to multi-agent RL problems which require communication.

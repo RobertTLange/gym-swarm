@@ -209,9 +209,15 @@ class SwarmEnv(gym.Env):
         self.done = False
         return self.current_state
 
-    def step(self, action, indiv_rewards=False, vf_size=None):
+    def step(self, action, reward_type= {"attraction": True,
+                                          "repulsion": True,
+                                          "alignment": True,
+                                          "indiv_rewards": False,
+                                          "vf_size": None}):
         """
         Perform a state transition/reward calculation based on selected action
+        -> action: Collective action dictionary for all agents
+        -> reward_type: Dictionary specifying reward config/specs to return
         """
         if self.done:
             raise RuntimeError("Episode has finished. Call env.reset() to start a new episode.")
@@ -238,12 +244,12 @@ class SwarmEnv(gym.Env):
             ch_id = self.change_position_id(states_temp, self.num_agents)
 
         # Update new state and perform a "follow-step" of the predator
-        self.current_state = dict(enumerate(states_temp.T))
         predator_state = self.predator.current_state.copy()
         self.predator.follow_target(self.current_state)
+        self.current_state = dict(enumerate(states_temp.T))
 
         # Calculate the reward based on the transition and return meta info
-        reward, self.done = self.swarm_reward(indiv_rewards, vf_size)
+        reward, self.done = self.swarm_reward(reward_type)
         info = {"predator_state": predator_state,
                 "predator_orientation": self.predator.orientation,
                 "predator_next_state": self.predator.current_state.copy()}
@@ -274,31 +280,33 @@ class SwarmEnv(gym.Env):
             # Return that overlap was detected
             return ch_id
 
-    def swarm_reward(self, indiv_rewards, vf_size):
+    def swarm_reward(self, reward_type):
         """
         Compute the global swarm reward based on multiple objectives:
             1. Survival: Neg reinforcement for collision with predator
             2. Repulsion: Neg reinforcement for too close agents
             3. Attraction: Pos reinforcment for agents in correct range
             4. Alignment: Pos reinforcement for similar movement dir
-        -> indiv_rewards: returns a dictionary of agent-specific rewards
-        -> agents_in_vf: rewards computed based on receptive fields of agents
+        -> reward_type: Dictionary specifying reward config/specs to return
+            * Sum up the individual components
+            * Return agent specific credit signals
+            * Constrain by visual fields
         """
         # Check if predator has "eaten" fish - terminate episode w neg reward
         overlaps = np.array([np.array_equal(self.predator.current_state,
                                             self.current_state[temp])
                                             for temp in self.current_state])
+        # Collision with predator - terminate episode and return neg rew
         if overlaps.sum() > 0:
             reward = self.predator_eat_rew
             done = True
 
-            if indiv_rewards:
+            if reward_type["indiv_rewards"]:
                 reward = dict(zip(range(self.num_agents), self.num_agents*[0]))
                 agent_id = np.argwhere(overlaps == 1)[0][0]
                 reward[agent_id] = self.predator_eat_rew
                 reward["global"] = self.predator_eat_rew
         else:
-            reward = 0
             # Cumulate rewards based on distance as well as alignment
             agent_states = np.array(list(self.current_state.values()))
             dist = DistanceMetric.get_metric('chebyshev')
@@ -308,18 +316,18 @@ class SwarmEnv(gym.Env):
             # Repulsion objective - Exclude agent themselves
             reps_1 = (dist_1 < self.repulsion_thresh)
             reps_2 = (dist_2 < self.repulsion_thresh)
-            reward -= reps_1.sum() - self.num_agents + reps_2.sum()
+            rew_rep = -(reps_1.sum() - self.num_agents + reps_2.sum())
 
             # Attraction objective
             attr_1 = (dist_1 < self.attraction_thresh) == (dist_1 >= self.repulsion_thresh)
             attr_2 =  (dist_2 < self.attraction_thresh) == (dist_2 >= self.repulsion_thresh)
-            reward += attr_1.sum() + attr_2.sum()
+            rew_attr = attr_1.sum() + attr_2.sum()
 
             # Alignment - Cosine dissimilarity between all actions taken
             move_array = np.array([m for m in self.move.values()])
             unalign = cosine_distances(move_array)/2
 
-            if vf_size is not None:
+            if reward_type["vf_size"] is not None:
                 """
                 If the rewards shall be constrained by the receptive field size
                 then given that delta_at <= vf_size we only need to change the
@@ -329,21 +337,29 @@ class SwarmEnv(gym.Env):
 
             # Get upper triangle set diag to 0, sum over all elements, -
             np.fill_diagonal(unalign, 0)
-            reward -= unalign.sum()
+            rew_unalign = -unalign.sum()
 
+            # Return reward according to curriculum objective
+            reward = (reward_type["repulsion"] * rew_rep +
+                      reward_type["attraction"] * rew_attr +
+                      reward_type["alignment"] * rew_unalign)
             # Normalize by the number of agents (twice - symmetry)
             reward /= self.num_agents*(self.num_agents - 1)
             done = False
 
-            if indiv_rewards:
+            if reward_type["indiv_rewards"]:
                 reward_global = reward
                 reward = dict(zip(range(self.num_agents), self.num_agents*[0]))
                 reward["global"] = reward_global
 
                 for agent_id in range(self.num_agents):
-                    reward[agent_id] -= reps_1[agent_id, :].sum() + reps_2[agent_id, :].sum() - 1
-                    reward[agent_id] += attr_1[agent_id, :].sum() + attr_2[agent_id, :].sum()
-                    reward[agent_id] -= unalign[agent_id, :].sum()
+                    rew_rep_i = -(reps_1[agent_id, :].sum() + reps_2[agent_id, :].sum() - 1)
+                    rew_attr_i = attr_1[agent_id, :].sum() + attr_2[agent_id, :].sum()
+                    rew_unalign_i = -unalign[agent_id, :].sum()
+
+                    reward[agent_id] = (reward_type["repulsion"] * rew_rep_i +
+                                        reward_type["attraction"] * rew_attr_i +
+                                        reward_type["alignment"] * rew_unalign_i)
                     reward[agent_id] /= self.num_agents*(self.num_agents - 1)
         return reward, done
 
