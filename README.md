@@ -1,7 +1,7 @@
 # gym-swarm
 ## An OpenAI Gym Style Environment for Complex Swarm Behavior
 ## Author: Robert Tjarko Lange
-## Date: February 2018
+## Date: January - March 2019
 
 In this repository we provide a first multi-agent reinforcement learning (MARL) that scales to a large number of agents and allows for efficient proto-typing of large-scale collective behavior. The environment is implemented in the classical OpenAI Gym style and allows for flexible reinforcement signal design.
 

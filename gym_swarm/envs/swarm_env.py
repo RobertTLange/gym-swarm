@@ -296,16 +296,24 @@ class SwarmEnv(gym.Env):
         overlaps = np.array([np.array_equal(self.predator.current_state,
                                             self.current_state[temp])
                                             for temp in self.current_state])
+
+        # Initialize the dictionary of rewards
+        reward_template = {"survival": 0, "attraction": 0,
+                           "repulsion": 0, "alignment":0, "sum": 0}
+
+        reward = {}
+        for agent_id in range(self.num_agents):
+            reward[agent_id] = reward_template.copy()
+        reward["global"] = reward_template.copy()
+
         # Collision with predator - terminate episode and return neg rew
         if overlaps.sum() > 0:
-            reward = self.predator_eat_rew
             done = True
-
-            if reward_type["indiv_rewards"]:
-                reward = dict(zip(range(self.num_agents), self.num_agents*[0]))
-                agent_id = np.argwhere(overlaps == 1)[0][0]
-                reward[agent_id] = self.predator_eat_rew
-                reward["global"] = self.predator_eat_rew
+            agent_id = np.argwhere(overlaps == 1)[0][0]
+            print(agent_id)
+            reward[agent_id]["survival"] = self.predator_eat_rew
+            reward[agent_id]["sum"] = self.predator_eat_rew
+            reward["global"]["survival"] = self.predator_eat_rew
         else:
             # Cumulate rewards based on distance as well as alignment
             agent_states = np.array(list(self.current_state.values()))
@@ -340,27 +348,23 @@ class SwarmEnv(gym.Env):
             rew_unalign = -unalign.sum()
 
             # Return reward according to curriculum objective
-            reward = (reward_type["repulsion"] * rew_rep +
-                      reward_type["attraction"] * rew_attr +
-                      reward_type["alignment"] * rew_unalign)
             # Normalize by the number of agents (twice - symmetry)
-            reward /= self.num_agents*(self.num_agents - 1)
+            reward["global"]["repulsion"] = reward_type["repulsion"] * rew_rep / (self.num_agents*(self.num_agents - 1))
+            reward["global"]["attraction"] = reward_type["attraction"] * rew_attr / (self.num_agents*(self.num_agents - 1))
+            reward["global"]["alignment"] = reward_type["alignment"] * rew_unalign / (self.num_agents*(self.num_agents - 1))
+            reward["global"]["sum"] = reward["global"]["repulsion"] + reward["global"]["attraction"] + reward["global"]["alignment"]
+
             done = False
 
-            if reward_type["indiv_rewards"]:
-                reward_global = reward
-                reward = dict(zip(range(self.num_agents), self.num_agents*[0]))
-                reward["global"] = reward_global
+            for agent_id in range(self.num_agents):
+                rew_rep_i = -(reps_1[agent_id, :].sum() + reps_2[agent_id, :].sum() - 1)
+                rew_attr_i = attr_1[agent_id, :].sum() + attr_2[agent_id, :].sum()
+                rew_unalign_i = -unalign[agent_id, :].sum()
 
-                for agent_id in range(self.num_agents):
-                    rew_rep_i = -(reps_1[agent_id, :].sum() + reps_2[agent_id, :].sum() - 1)
-                    rew_attr_i = attr_1[agent_id, :].sum() + attr_2[agent_id, :].sum()
-                    rew_unalign_i = -unalign[agent_id, :].sum()
-
-                    reward[agent_id] = (reward_type["repulsion"] * rew_rep_i +
-                                        reward_type["attraction"] * rew_attr_i +
-                                        reward_type["alignment"] * rew_unalign_i)
-                    reward[agent_id] /= self.num_agents*(self.num_agents - 1)
+                reward[agent_id]["repulsion"] = reward_type["repulsion"] * rew_rep_i/ (self.num_agents*(self.num_agents - 1))
+                reward[agent_id]["attraction"] = reward_type["attraction"] * rew_attr_i/ (self.num_agents*(self.num_agents - 1))
+                reward[agent_id]["alignment"] = reward_type["alignment"] * rew_unalign_i/ (self.num_agents*(self.num_agents - 1))
+                reward[agent_id]["sum"] = reward[agent_id]["repulsion"] + reward[agent_id]["attraction"] + reward[agent_id]["alignment"]
         return reward, done
 
     def set_env_parameters(self, num_agents=4,
