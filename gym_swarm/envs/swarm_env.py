@@ -310,10 +310,10 @@ class SwarmEnv(gym.Env):
         if overlaps.sum() > 0:
             done = True
             agent_id = np.argwhere(overlaps == 1)[0][0]
-            print(agent_id)
             reward[agent_id]["survival"] = self.predator_eat_rew
             reward[agent_id]["sum"] = self.predator_eat_rew
             reward["global"]["survival"] = self.predator_eat_rew
+            reward["global"]["sum"] = self.predator_eat_rew
         else:
             # Cumulate rewards based on distance as well as alignment
             agent_states = np.array(list(self.current_state.values()))
@@ -341,7 +341,7 @@ class SwarmEnv(gym.Env):
                 then given that delta_at <= vf_size we only need to change the
                 unalign negative reinforcement computation!
                 """
-                unalign[dist_1 > vf_size] = 0
+                unalign[dist_1 > reward_type["vf_size"]] = 0
 
             # Get upper triangle set diag to 0, sum over all elements, -
             np.fill_diagonal(unalign, 0)
