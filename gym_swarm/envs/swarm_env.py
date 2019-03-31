@@ -3,6 +3,7 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 
 import os
+import math
 import numpy as np
 from sklearn.metrics.pairwise import cosine_distances
 from scipy import ndimage
@@ -146,6 +147,16 @@ class Predator():
                 move[i] = -1
             elif coord_dist[i] <= -1:
                 move[i] = 1
+
+        # Compute Chebyshev distance between predator and agent
+        chebyshev_dist = np.max(coord_dist)
+        # If dist > obs_space_size/2 - move in opposite direction!
+        if chebyshev_dist > math.floor(self.obs_space_size/2):
+            for i in range(2):
+                if move[i] == 1:
+                    move[i] = -1
+                elif move[i] == -1:
+                    move[i] = 1
 
         for action, move_d in action_to_move.items():
             if (move == move_d).all():
@@ -403,7 +414,7 @@ class SwarmEnv(gym.Env):
         y = [self.current_state[state][1] for state in self.current_state]
 
         # Plot the empty grid
-        fig, ax = plt.subplots(dpi=200)
+        fig, ax = plt.subplots(dpi=200, figsize=(10, 10))
         x_ax = np.linspace(0, self.obs_space_size-1)
         y_ax = np.linspace(0, self.obs_space_size-1)
         plot = ax.plot(x_ax, y_ax, linestyle="")
@@ -417,8 +428,8 @@ class SwarmEnv(gym.Env):
         fish_axs = [None for i in range(len(x) + 1)]
 
         # Set grid lines for better viz fields
-        plt.xticks(np.arange(0, 10, 1))
-        plt.yticks(np.arange(0, 10, 1))
+        plt.xticks(np.arange(0, self.obs_space_size, 1))
+        plt.yticks(np.arange(0, self.obs_space_size, 1))
         plt.grid(True)
 
         # Loop over all agents and create windows for respective positions
