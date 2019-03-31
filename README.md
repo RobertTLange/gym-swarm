@@ -15,7 +15,7 @@ The state space is defined to be a discrete grid of variable size. You can set t
 
 Furthermore, the environment features a predator which initially computes its nearest neighbor (in terms of Chebyshev Distance - due to diagonal movements). This agent is assigned to be the target. Afterwards, the predator continually follows the chosen target. In 10 percent of the transitions the predator computes the nearest neighbor and updates its target.
 
-An episode ends once the predator collides with an agent.
+An episode terminates once the predator collides with an agent.
 
 ## Reward function
 
@@ -46,8 +46,19 @@ python gym_swarm/tests/test.py
 
 # Usage
 
-Go [here](tryout_swarm_env.ipynb)!
+Go [here](tryout_swarm_env.ipynb)! If you are using this repository for your research please cite it with the following information:
 
+```
+@misc{Lange_2018,
+  author = {Lange, Robert Tjarko},
+  title = {gym-swarm},
+  year = {2018},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/RobertTLange/gym-swarm}},
+  commit = {#CommitId}
+}
+```
 
 # Notes
 * Environment is especially suited for prototyping solutions to multi-agent RL problems which require communication.

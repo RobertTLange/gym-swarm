@@ -356,6 +356,7 @@ class SwarmEnv(gym.Env):
 
             done = False
 
+            # Get agent-specific contributions
             for agent_id in range(self.num_agents):
                 rew_rep_i = -(reps_1[agent_id, :].sum() + reps_2[agent_id, :].sum() - 1)
                 rew_attr_i = attr_1[agent_id, :].sum() + attr_2[agent_id, :].sum()
@@ -379,8 +380,8 @@ class SwarmEnv(gym.Env):
             print("\t State Space: {}x{} Grid".format(self.obs_space_size,
                                                       self.obs_space_size))
 
-    def set_reward_parameters(self, attraction_thresh,
-                              repulsion_thresh, predator_eat_rew,
+    def set_reward_parameters(self, attraction_thresh=5,
+                              repulsion_thresh=2, predator_eat_rew=-10,
                               verbose=False):
         # Reset the reward function parameters
         self.attraction_thresh = attraction_thresh
@@ -414,6 +415,11 @@ class SwarmEnv(gym.Env):
         # fish_size = 0.25*ax_width/(fig_width*len(x))
         fish_size = 0.008*self.obs_space_size
         fish_axs = [None for i in range(len(x) + 1)]
+
+        # Set grid lines for better viz fields
+        plt.xticks(np.arange(0, 10, 1))
+        plt.yticks(np.arange(0, 10, 1))
+        plt.grid(True)
 
         # Loop over all agents and create windows for respective positions
         for i in range(len(x)):
