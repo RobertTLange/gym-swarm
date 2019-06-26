@@ -221,10 +221,10 @@ class SwarmEnv(gym.Env):
         return self.current_state
 
     def step(self, action, reward_type= {"attraction": True,
-                                          "repulsion": True,
-                                          "alignment": True,
-                                          "indiv_rewards": False,
-                                          "vf_size": None}):
+                                         "repulsion": True,
+                                         "alignment": True,
+                                         "indiv_rewards": False,
+                                         "vf_size": None}):
         """
         Perform a state transition/reward calculation based on selected action
         -> action: Collective action dictionary for all agents
@@ -471,7 +471,8 @@ action_to_move = {0: np.array([-1, 0]),
                   4: np.array([1, 0]),
                   5: np.array([1, 1]),
                   6: np.array([0, 1]),
-                  7: np.array([-1, 1])}
+                  7: np.array([-1, 1]),
+                  8: np.array([0, 0])}
 
 ACTION_LOOKUP = {0: "left",
                  1: "left-down",
@@ -480,4 +481,5 @@ ACTION_LOOKUP = {0: "left",
                  4: "right",
                  5: "right-up",
                  6: "up",
-                 7: "left-up"}
+                 7: "left-up",
+                 8: "no-move"}
