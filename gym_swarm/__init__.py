@@ -12,3 +12,8 @@ register(
     id='Shepherd-v0',
     entry_point='gym_swarm.envs:ShepherdEnv',
 )
+
+register(
+    id='Doppelpass-v0',
+    entry_point='gym_swarm.envs:Doppelpass1DEnv',
+)
