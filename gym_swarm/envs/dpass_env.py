@@ -31,12 +31,17 @@ fish_imgs = {0: fish_img,
 
 
 class key_to_goal():
+<<<<<<< HEAD
     def __init__(self, obs_space_size, pickup_range):
+=======
+    def __init__(self, obs_space_size, pickup_range=0.5):
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
         """
         Key object that has to be passed twice before walking to goal with it
         - init_position: Initial position of the key
         - pickup_nhood: neighborhood in which the key can be picked up
         """
+<<<<<<< HEAD
         # Set observation space & range around key in which it can be picked up
         self.obs_space_size = obs_space_size
         self.pickup_range = pickup_range
@@ -48,6 +53,17 @@ class key_to_goal():
     def initialize_key(self):
         self.position = np.random.uniform(low=0, high=self.obs_space_size,
                                           size=1)
+=======
+        # Set range around key in which it can be picked up
+        self.pickup_range = pickup_range
+        # Random initialzation of key location and reset ownership/pass counter
+        self.initialize_key(obs_space_size)
+        # Calculate nhood in which pickup is allowed (adapt with key location)
+        self.update_pickup_nhood()
+
+    def initialize_key(self, obs_space_size):
+        self.position = np.random.uniform(low=0, high=obs_space_size, size=1)
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
         self.ownership = None
         self.pass_count = 0
 
@@ -55,7 +71,11 @@ class key_to_goal():
         self.pickup_nhood = [self.position-self.pickup_range/2,
                              self.position+self.pickup_range/2]
 
+<<<<<<< HEAD
     def attempt_key_pickup(self, agent_id, agents_positions):
+=======
+    def attempt_pickup(self, agent_id, agents_positions):
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
         # Check if agent is within pickup range of key and update key position
         if self.pickup_nhood[0] <= agents_positions[agent_id] <= self.pickup_nhood[1]:
             self.ownership = agent_id
@@ -67,7 +87,11 @@ class key_to_goal():
     def attempt_key_pass(self, agent_id, agents_positions):
         # Check if key is in possession of one agent and the other is in
         # passing distance to pass key - change ownership if so
+<<<<<<< HEAD
         # NOTE: In 2 agent case we can simply do 1-id to index other agent
+=======
+        # Note: In 2 agent case we can simply do 1-id to index other agent
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
         if self.pickup_nhood[0] <= agents_positions[1-agent_id] <= self.pickup_nhood[1]:
             self.ownership = 1-agent_id
             self.move_with_owner(agents_positions)
@@ -76,7 +100,11 @@ class key_to_goal():
             return False
 
     def move_with_owner(self, agents_positions):
+<<<<<<< HEAD
         # Call at every env step - Check key ownership & update position
+=======
+        # Check if agent is currently being held by agent & update key position
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
         if self.ownership is not None:
             self.position = agents_positions[self.ownership]
             self.update_pickup_nhood()
@@ -86,12 +114,17 @@ class Doppelpass1DEnv(gym.Env):
     """
     "1D" Continuous Action Space Doppelpass Environment
     2 Agent env in which agents have to pick up a key and exchange it twice
+<<<<<<< HEAD
     before reaching a goal location to successfully end the episode
+=======
+    before reaching a goal location
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
     """
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
         # SET INITIAL ENVIRONMENT PARAMETERS
+<<<<<<< HEAD
         self.num_agents = 2                 # No. agents in env - 2 for now
         self.obs_space_size = 20            # Size of 1d line [0, 20]
         self.pickup_range = 0.5             # Nhood to pick up/pass key in
@@ -105,6 +138,19 @@ class Doppelpass1DEnv(gym.Env):
 
         # FIX GOAL POSITION TO BE AT BORDER OF ENV - SAMPLE LATER ON
         self.goal = self.obs_space_size     # Set goal position to end of line
+=======
+        self.num_agents = 2
+        self.obs_space_size = 20
+        self.random_placement = True
+        self.done = None
+
+        # SET MAX//MIN VELOCITY AND ACCELARATION
+        self.v_bounds = [-1, 1]
+        self.a_bounds = [-1, 1]
+
+        # FIX GOAL POSITION TO BE AT BORDER OF ENV - SAMPLE LATER ON
+        self.goal_position = self.obs_space_size
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
 
         # SET INITIAL REWARD FUNCTION PARAMETERS
         self.wrong_pickup_reward = -1       # R - wrong attempt to pick up key
@@ -113,13 +159,17 @@ class Doppelpass1DEnv(gym.Env):
         self.correct_exchange_reward = 1    # R - exchanging key between agents
         self.correct_placement_reward = 10  # R - wrong attempt to exchange key
 
+<<<<<<< HEAD
         # INITIALIZE THE KEY
         self.key = key_to_goal(self.obs_space_size, self.pickup_range)
 
+=======
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
     def reset(self):
         """
         Sample initial placement of agents on straight line w. no velocity
         """
+<<<<<<< HEAD
         self.key.initialize_key()
         self.agents_postions = np.random.uniform(low=0,
                                                 high=self.obs_space_size,
@@ -135,16 +185,39 @@ class Doppelpass1DEnv(gym.Env):
         print(self.state)
         print(self.observations)
         return self.observations
+=======
+        if self.random_placement:
+            self.current_postion = np.random.uniform(low=0,
+                                                     high=self.obs_space_size,
+                                                     size=self.num_agents)
+            self.current_velocity = np.repeat(0, self.num_agents)
+
+            self.key_position =
+        self.done = False
+        return self.current_state
+
+    def try_pickup_key(self, agent_id):
+        # TODO: Implement check of agent position - if so change ownership of key, etc.
+
+        return
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
 
     def step(self, action):
         """
         Perform a state transition/reward calculation based on selected action
+<<<<<<< HEAD
         -> action: 3d array. 1d = acceleration, 2d = pickup boolean, 3d = pass boolean
+=======
+        -> action: Collective action dictionary for all agents
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
         """
         if self.done:
             raise RuntimeError("Episode has finished. Call env.reset() to start a new episode.")
 
+<<<<<<< HEAD
         # NOTE: Be careful with async execution of actions
+=======
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
         for agent_id, action in action.items():
             # Clip accelaration into range
             v_a = np.clip(self.current_velocity + action[0],
@@ -152,6 +225,7 @@ class Doppelpass1DEnv(gym.Env):
             next_position_a = np.clip(self.current_position[agent_id] + v_a,
                                       0, self.obs_space_size)
 
+<<<<<<< HEAD
             pickup_success, pass_success = None, None
             if action[1]:
                 # Check whether agent can execute pickup
@@ -160,6 +234,8 @@ class Doppelpass1DEnv(gym.Env):
                 # Check whether agents can execute pass of key
                 pass_success = self.key.attempt_key_pass()
 
+=======
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
             # TODO: Implement pickup/pass actions
             # TODO: Update the actual state of the agents
 
@@ -168,6 +244,7 @@ class Doppelpass1DEnv(gym.Env):
         info = {"warnings": None}
         return self.current_state, reward, self.done, info
 
+<<<<<<< HEAD
     def get_current_state(self):
         # Collect all state relevant variables in a dictionary
         return {"key_position": self.key.position,
@@ -233,13 +310,21 @@ class Doppelpass1DEnv(gym.Env):
     def set_doppelpass_params(self):
         return
 
+=======
+    def reward_doppelpass(self, reward_type):
+        return reward, done
+
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
     def render(self, mode='rgb_array', close=False):
         """
         Render the environment state
         """
         return
+<<<<<<< HEAD
 
 
 if __name__ == "__main__":
     env = Doppelpass1DEnv()
     env.reset()
+=======
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891

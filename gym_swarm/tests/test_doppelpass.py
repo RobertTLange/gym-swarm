@@ -28,9 +28,15 @@ class Environment(unittest.TestCase):
         self.assertEqual(10, env.num_agents)
         self.assertEqual(200, env.obs_space_size)
 
+<<<<<<< HEAD
     def test_set_params(self):
         env = gym.make("Doppelpass-v0")
         env.set_doppelpass_params(attraction_thresh=10,
+=======
+    def test_set_reward_params(self):
+        env = gym.make("Doppelpass-v0")
+        env.set_reward_parameters(attraction_thresh=10,
+>>>>>>> 83baa31380f616607ccae38232414129a23b0891
                                   repulsion_thresh=200,
                                   predator_eat_rew=-50,
                                   verbose=False)
