@@ -31,28 +31,52 @@ fish_imgs = {0: fish_img,
 
 
 class key_to_goal():
-    def __init__(self, init_position, pickup_range=0.5):
+    def __init__(self, obs_space_size, pickup_range=0.5):
         """
         Key object that has to be passed twice before walking to goal with it
         - init_position: Initial position of the key
         - pickup_nhood: neighborhood in which the key can be picked up
         """
-        self.position = init_position
-        self.ownership = None
-        self.update_pickup_nhood()
-        self.pass_count = 0
+        # Set range around key in which it can be picked up
         self.pickup_range = pickup_range
+        # Random initialzation of key location and reset ownership/pass counter
+        self.initialize_key(obs_space_size)
+        # Calculate nhood in which pickup is allowed (adapt with key location)
+        self.update_pickup_nhood()
+
+    def initialize_key(self, obs_space_size):
+        self.position = np.random.uniform(low=0, high=obs_space_size, size=1)
+        self.ownership = None
+        self.pass_count = 0
 
     def update_pickup_nhood(self):
         self.pickup_nhood = [self.position-self.pickup_range/2,
                              self.position+self.pickup_range/2]
 
-    def pick_up_and_check(self, agent_position):
-        return
+    def attempt_pickup(self, agent_id, agents_positions):
+        # Check if agent is within pickup range of key and update key position
+        if self.pickup_nhood[0] <= agents_positions[agent_id] <= self.pickup_nhood[1]:
+            self.ownership = agent_id
+            self.move_with_owner(agents_positions)
+            return True
+        else:
+            return False
 
-    def move_with_owner(self, current_position_agents):
+    def attempt_key_pass(self, agent_id, agents_positions):
+        # Check if key is in possession of one agent and the other is in
+        # passing distance to pass key - change ownership if so
+        # Note: In 2 agent case we can simply do 1-id to index other agent
+        if self.pickup_nhood[0] <= agents_positions[1-agent_id] <= self.pickup_nhood[1]:
+            self.ownership = 1-agent_id
+            self.move_with_owner(agents_positions)
+            return True
+        else:
+            return False
+
+    def move_with_owner(self, agents_positions):
+        # Check if agent is currently being held by agent & update key position
         if self.ownership is not None:
-            self.position = current_position_agents[self.ownership]
+            self.position = agents_positions[self.ownership]
             self.update_pickup_nhood()
 
 
@@ -95,14 +119,13 @@ class Doppelpass1DEnv(gym.Env):
                                                      size=self.num_agents)
             self.current_velocity = np.repeat(0, self.num_agents)
 
-            self.key_position = np.random.uniform(low=0,
-                                                  high=self.obs_space_size,
-                                                  size=1)
+            self.key_position =
         self.done = False
         return self.current_state
 
-    def try_pickup_key():
+    def try_pickup_key(self, agent_id):
         # TODO: Implement check of agent position - if so change ownership of key, etc.
+
         return
 
     def step(self, action):
