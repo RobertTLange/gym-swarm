@@ -22,14 +22,7 @@ key_img = plt.imread(get_sample_data(dir_path + "/images/key.png"))
 fish_img = plt.imread(get_sample_data(dir_path + "/images/fish_tropical.png"))
 fish_inv_img = np.flip(fish_img, axis=1)
 
-fish_imgs = {0: fish_img,
-             1: ndimage.rotate(fish_img, 45)[33:193, 33:193, :],
-             2: ndimage.rotate(fish_img, 90),
-             3: ndimage.rotate(fish_inv_img, -45)[33:193, 33:193, :],
-             4: ndimage.rotate(fish_inv_img, 0),
-             5: ndimage.rotate(fish_inv_img, 45)[33:193, 33:193, :],
-             6: ndimage.rotate(fish_img, -90),
-             7: ndimage.rotate(fish_img, -45)[33:193, 33:193, :]}
+fish_imgs = {0: fish_img, 1: ndimage.rotate(fish_inv_img, 0)}
 
 
 class key_to_goal():
@@ -319,6 +312,54 @@ class Doppelpass1DEnv(gym.Env):
         """
         Render the environment state
         """
+        x = [self.state["agents_positions"][agent_id] for agent_id in range(self.num_agents)]
+        y = [0.5 for agent_id in range(self.num_agents)]
+        # Plot the empty grid/line with 1 width
+        fig, ax = plt.subplots(dpi=200, figsize=(10, 1))
+        x_ax = np.linspace(0, self.obs_space_size)
+        y_ax = np.linspace(0, 1)
+        plot = ax.plot(x_ax, y_ax, linestyle="")
+
+        # Define size of individual fish window in empty grid
+        ax_width = ax.get_window_extent().width
+        fig_width = fig.get_window_extent().width
+        fig_height = fig.get_window_extent().height
+        # fish_size = 0.25*ax_width/(fig_width*len(x))
+        fish_size = self.obs_space_size/100
+        axs_to_plot = [None for i in range(len(x) + 2)]
+
+        # Loop over all agents and create windows for respective positions
+        for i in range(len(x)):
+            loc = ax.transData.transform((x[i], y[i]))
+            axs_to_plot[i] = fig.add_axes([loc[0]/fig_width-fish_size/2,
+                                           loc[1]/fig_height-fish_size/2,
+                                           fish_size, fish_size], anchor='C')
+
+            # TODO: Add orientation based on velocity
+            axs_to_plot[i].imshow((fish_imgs[0]*255).astype(np.uint8))
+            axs_to_plot[i].axis("off")
+
+        # Add the key and goal as final axes objects
+        loc = ax.transData.transform((self.key.position[0], 0.5))
+        axs_to_plot[len(x)] = fig.add_axes([loc[0]/fig_width-fish_size/2,
+                                            loc[1]/fig_height-fish_size/2,
+                                            fish_size, fish_size], anchor='C')
+
+        axs_to_plot[len(x)].imshow((key_img*255).astype(np.uint8))
+        axs_to_plot[len(x)].axis("off")
+
+        loc = ax.transData.transform((self.goal, 0.5))
+        axs_to_plot[len(x) + 1] = fig.add_axes([loc[0]/fig_width-fish_size/2,
+                                                loc[1]/fig_height-fish_size/2,
+                                                fish_size, fish_size], anchor='C')
+
+        axs_to_plot[len(x) + 1].imshow((goal_img*255).astype(np.uint8))
+        axs_to_plot[len(x) + 1].axis("off")
+
+        plt.setp(ax.get_xticklabels(), visible=False)
+        plt.setp(ax.get_yticklabels(), visible=False)
+        ax.tick_params(axis='both', which='both', length=0)
+        plt.show()
         return
 
 
@@ -331,3 +372,4 @@ if __name__ == "__main__":
     observation, reward, done, info = env.step(action)
     print(env.state)
     print(observation, reward, done, info)
+    env.render()
