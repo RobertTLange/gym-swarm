@@ -16,7 +16,9 @@ from sklearn.neighbors import DistanceMetric
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
-# Read in fish and predator emojis to plot episodes
+# Read in emojis to plot episodes
+goal_img = plt.imread(get_sample_data(dir_path + "/images/goal.png"))
+key_img = plt.imread(get_sample_data(dir_path + "/images/key.png"))
 fish_img = plt.imread(get_sample_data(dir_path + "/images/fish_tropical.png"))
 fish_inv_img = np.flip(fish_img, axis=1)
 
@@ -108,8 +110,8 @@ class Doppelpass1DEnv(gym.Env):
         self.num_agents = 2                 # No. agents in env - 2 for now
         self.obs_space_size = 20            # Size of 1d line [0, 20]
         self.pickup_range = 0.5             # Nhood to pick up/pass key in
-        self.observation_range = 10         # Nhood observed by agents
-        self.observation_resolution = 5    # Categorical obs bins in nhood
+        self.observation_range = 5          # Nhood observed by agents
+        self.observation_resolution = 10    # Categorical obs bins in nhood
         self.done = None
 
         # SET MAX//MIN VELOCITY AND ACCELARATION
@@ -287,7 +289,30 @@ class Doppelpass1DEnv(gym.Env):
                 reward[agent_id] += self.wrong_putdown_reward
         return reward, done
 
-    def set_doppelpass_params(self):
+    def set_env_params(self, env_params=None, reward_params=None):
+        # SET INITIAL ENVIRONMENT PARAMETERS
+        if env_params is not None:
+            self.obs_space_size = env_params["obs_space_size"]
+            self.pickup_range = env_params["pickup_range"]
+            self.observation_range = env_params["observation_range"]
+            self.observation_resolution = env_params["observation_resolution"]
+
+            # SET MAX//MIN VELOCITY AND ACCELARATION
+            self.v_bounds = env_params["v_bounds"]
+            self.a_bounds = env_params["a_bounds"]
+
+            # FIX GOAL POSITION TO BE AT BORDER OF ENV - SAMPLE LATER ON
+            self.goal = env_params["goal"]
+            self.required_key_passes = env_params["required_key_passes"]
+
+        # SET REWARD FUNCTION PARAMETERS - pickup, pass, put down
+        if reward_params is not None:
+            self.wrong_pickup_reward   = reward_params["wrong_pickup_reward"]
+            self.correct_pickup_reward = reward_params["correct_pickup_reward"]
+            self.wrong_pass_reward     = reward_params["wrong_pass_reward"]
+            self.correct_pass_reward   = reward_params["correct_pass_reward"]
+            self.wrong_putdown_reward  = reward_params["wrong_putdown_reward"]
+            self.goal_reach_reward     = reward_params["goal_reach_reward"]
         return
 
     def render(self, mode='rgb_array', close=False):
