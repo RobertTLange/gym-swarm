@@ -50,6 +50,7 @@ class key_to_goal():
                                           size=1)
         self.ownership = None
         self.pass_count = 0
+        self.pickup_count = 0
 
     def update_pickup_nhood(self):
         self.pickup_nhood = [self.position-self.pickup_range/2,
@@ -61,6 +62,7 @@ class key_to_goal():
         in_nhood = (self.pickup_nhood[0] <= agents_positions[agent_id] <= self.pickup_nhood[1])
         if no_ownership and in_nhood:
             self.ownership = agent_id
+            self.pickup_count += 1
             return True
         else:
             return False
@@ -138,7 +140,7 @@ class Doppelpass1DEnv(gym.Env):
         self.agents_positions = np.random.uniform(low=0,
                                                   high=self.obs_space_size,
                                                   size=self.num_agents)
-        self.agents_velocities = np.repeat(0, self.num_agents)
+        self.agents_velocities = np.repeat(0., self.num_agents)
 
         # CONSTRUCT STATE - FULLY OBS & CONSTRUCT OBSERVATION - PARTIALLY OBS
         self.state = self.get_current_state()
@@ -156,8 +158,10 @@ class Doppelpass1DEnv(gym.Env):
 
         # NOTE: Careful - async execution of actions - first update states - then categorical actions
         for agent_id, agent_action in action.items():
-            # Clip accelaration and position into range (env specification)
-            self.agents_velocities[agent_id] = np.clip(self.agents_velocities[agent_id] + agent_action[0],
+            # Clip accelarations into range (env specification)
+            acc_clipped = np.clip(agent_action[0], self.a_bounds[0], self.a_bounds[1])
+            # Clip position into range (env specification)
+            self.agents_velocities[agent_id] = np.clip(self.agents_velocities[agent_id] + acc_clipped,
                                                        self.v_bounds[0], self.v_bounds[1])
             self.agents_positions[agent_id] = np.clip(self.agents_positions[agent_id] + self.agents_velocities[agent_id],
                                                       0, self.obs_space_size)
@@ -255,11 +259,32 @@ class Doppelpass1DEnv(gym.Env):
 
     def reward_doppelpass(self, pickup_success, putdown_success, pass_success):
         """
-        Compute the agent-specific
+        Agent-specific rewards for key pickup, pass & putdown
         """
         # NOTE: Decide in learning loop whether to aggregate to global signal
         done = False
-        reward = {0: 0, 1: 1}
+        reward = {0: 0, 1: 0}
+
+        for agent_id in range(self.num_agents):
+            # Compute pickup reward for agent - if None no pickup was attempted
+            if pickup_success[agent_id] == True and self.key.pickup_count < 1:
+                reward[agent_id] += self.correct_pickup_reward
+            elif pickup_success[agent_id] == False:
+                reward[agent_id] += self.wrong_pickup_reward
+
+            # Compute pass reward for agent - if None no pass was attempted
+            if pass_success[agent_id] == True and self.key.pass_count < self.required_key_passes:
+                reward[agent_id] += self.correct_pass_reward
+            elif pass_success[agent_id] == False:
+                reward[agent_id] += self.wrong_pass_reward
+
+            # Compute putdown reward for agent - if None no putdown was attempted
+            goal_in_putdown_nhood = (np.absolute(self.goal - self.key.position) < self.pickup_range)
+            if putdown_success[agent_id] == True and goal_in_putdown_nhood:
+                reward[agent_id] += self.goal_reach_reward
+                done = True
+            elif putdown_success[agent_id] == False:
+                reward[agent_id] += self.wrong_putdown_reward
         return reward, done
 
     def set_doppelpass_params(self):
@@ -275,6 +300,9 @@ class Doppelpass1DEnv(gym.Env):
 if __name__ == "__main__":
     env = Doppelpass1DEnv()
     observation = env.reset()
+    print(env.state)
     action = {0: np.array([0.5, 1, 0, 0]),
               1: np.array([0.33, 0, 1, 1])}
-    env.step(action)
+    observation, reward, done, info = env.step(action)
+    print(env.state)
+    print(observation, reward, done, info)
