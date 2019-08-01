@@ -313,11 +313,11 @@ class Doppelpass1DEnv(gym.Env):
         Render the environment state
         """
         x = [self.state["agents_positions"][agent_id] for agent_id in range(self.num_agents)]
-        y = [0.5 for agent_id in range(self.num_agents)]
+        y = [0.125 for agent_id in range(self.num_agents)]
         # Plot the empty grid/line with 1 width
         fig, ax = plt.subplots(dpi=200, figsize=(10, 1))
         x_ax = np.linspace(0, self.obs_space_size)
-        y_ax = np.linspace(0, 1)
+        y_ax = np.linspace(0, 0.25)
         plot = ax.plot(x_ax, y_ax, linestyle="")
 
         # Define size of individual fish window in empty grid
@@ -336,11 +336,11 @@ class Doppelpass1DEnv(gym.Env):
                                            fish_size, fish_size], anchor='C')
 
             # TODO: Add orientation based on velocity
-            axs_to_plot[i].imshow((fish_imgs[0]*255).astype(np.uint8))
+            axs_to_plot[i].imshow((fish_imgs[self.state["agents_velocities"][i] > 0]*255).astype(np.uint8))
             axs_to_plot[i].axis("off")
 
         # Add the key and goal as final axes objects
-        loc = ax.transData.transform((self.key.position[0], 0.5))
+        loc = ax.transData.transform((self.key.position[0], 0.125))
         axs_to_plot[len(x)] = fig.add_axes([loc[0]/fig_width-fish_size/2,
                                             loc[1]/fig_height-fish_size/2,
                                             fish_size, fish_size], anchor='C')
@@ -348,7 +348,7 @@ class Doppelpass1DEnv(gym.Env):
         axs_to_plot[len(x)].imshow((key_img*255).astype(np.uint8))
         axs_to_plot[len(x)].axis("off")
 
-        loc = ax.transData.transform((self.goal, 0.5))
+        loc = ax.transData.transform((self.goal, 0.125))
         axs_to_plot[len(x) + 1] = fig.add_axes([loc[0]/fig_width-fish_size/2,
                                                 loc[1]/fig_height-fish_size/2,
                                                 fish_size, fish_size], anchor='C')
