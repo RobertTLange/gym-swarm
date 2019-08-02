@@ -5,9 +5,8 @@ from gym.utils import seeding
 import os
 import math
 import numpy as np
-from sklearn.metrics.pairwise import cosine_distances
-from scipy import ndimage
 
+from scipy import ndimage
 import matplotlib.pyplot as plt
 from matplotlib.cbook import get_sample_data
 
@@ -110,6 +109,11 @@ class Doppelpass1DEnv(gym.Env):
         # SET MAX//MIN VELOCITY AND ACCELARATION
         self.v_bounds = [-1, 1]             # Clip velocity into range
         self.a_bounds = [-0.5, 0.5]         # Clip acceleration into range
+
+        # SET OBSERVATION AND ACTION SPACE
+        self.observation_space = spaces.Box(low=0, high=self.obs_space_size, shape=(1,), dtype=np.float32)
+        self.action_space = spaces.Tuple([spaces.Box(low=self.a_bounds[0], high=self.a_bounds[1], shape=(1,), dtype=np.float32),
+                                          spaces.Discrete(2), spaces.Discrete(2), spaces.Discrete(2)])
 
         # FIX GOAL POSITION TO BE AT BORDER OF ENV - SAMPLE LATER ON
         self.goal = self.obs_space_size     # Set goal position to end of line
@@ -294,6 +298,11 @@ class Doppelpass1DEnv(gym.Env):
             self.v_bounds = env_params["v_bounds"]
             self.a_bounds = env_params["a_bounds"]
 
+            # UPDATE SPACES AFTERWARDS
+            self.observation_space = spaces.Box(low=0, high=self.obs_space_size, shape=(1,), dtype=np.float32)
+            self.action_space = spaces.Tuple([spaces.Box(low=self.a_bounds[0], high=self.a_bounds[1], shape=(1,), dtype=np.float32),
+                                              spaces.Discrete(2), spaces.Discrete(2), spaces.Discrete(2)])
+
             # FIX GOAL POSITION TO BE AT BORDER OF ENV - SAMPLE LATER ON
             self.goal = env_params["goal"]
             self.required_key_passes = env_params["required_key_passes"]
@@ -373,3 +382,5 @@ if __name__ == "__main__":
     print(env.state)
     print(observation, reward, done, info)
     env.render()
+    print(env.observation_space.sample())
+    print(env.action_space.sample())
