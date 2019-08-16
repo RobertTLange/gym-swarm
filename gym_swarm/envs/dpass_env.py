@@ -192,11 +192,11 @@ class Doppelpass1DEnv(gym.Env):
         pass_success = {0: None, 1: None}
 
         for agent_id, agent_action in action.items():
-            if agent_action[1]:  # Check whether agent can execute key pickup
+            if agent_action[1] > 0.5:  # Check whether agent can exec key pickup
                 pickup_success[agent_id] = self.key.attempt_key_pickup(agent_id, self.agents_positions)
-            if agent_action[2]:  # Check whether agent can execute key putdown
+            if agent_action[2] > 0.5:  # Check whether agent can exec key putdown
                 putdown_success[agent_id] = self.key.attempt_key_putdown(agent_id)
-            if agent_action[3]:  # Check whether agents can execute pass of key
+            if agent_action[3] > 0.5:  # Check whether agents can exec pass of key
                 pass_success[agent_id] = self.key.attempt_key_pass(agent_id, self.agents_positions)
 
         # Update position of key after pass attempt - respect nhood!
@@ -304,7 +304,8 @@ class Doppelpass1DEnv(gym.Env):
                 reward[agent_id] += self.wrong_putdown_reward
         return reward, done
 
-    def set_env_params(self, env_params=None, reward_params=None):
+    def set_env_params(self, env_params=None, reward_params=None,
+                       random_placement=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
         if env_params is not None:
             self.obs_space_size = env_params["obs_space_size"]
@@ -333,6 +334,9 @@ class Doppelpass1DEnv(gym.Env):
             self.correct_pass_reward   = reward_params["correct_pass_reward"]
             self.wrong_putdown_reward  = reward_params["wrong_putdown_reward"]
             self.goal_reach_reward     = reward_params["goal_reach_reward"]
+
+        # SET RANDOM PLACEMENT BOOLEAN PARAM
+        self.random_placement = random_placement
         return
 
     def render(self, mode='rgb_array', close=False):
