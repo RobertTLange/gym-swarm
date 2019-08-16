@@ -25,7 +25,7 @@ fish_imgs = {0: fish_img, 1: ndimage.rotate(fish_inv_img, 0)}
 
 
 class key_to_goal():
-    def __init__(self, obs_space_size, pickup_range):
+    def __init__(self, obs_space_size, pickup_range, random_placement):
         """
         Key object that has to be passed twice before walking to goal with it
         - init_position: Initial position of the key
@@ -34,14 +34,19 @@ class key_to_goal():
         # Set observation space & range around key in which it can be picked up
         self.obs_space_size = obs_space_size
         self.pickup_range = pickup_range
-        # Random initialzation of key location and reset ownership/pass counter
+        self.random_placement = random_placement
+        # (Random) init of key location and reset ownership/pass counter
         self.initialize_key()
         # Calculate nhood in which pickup is allowed (adapt with key location)
         self.update_pickup_nhood()
 
     def initialize_key(self):
-        self.position = np.random.uniform(low=0, high=self.obs_space_size,
-                                          size=1)
+        if self.random_placement:
+            self.position = np.random.uniform(low=0, high=self.obs_space_size,
+                                              size=1)
+        else:
+            self.position = self.obs_space_size/2
+
         self.ownership = None
         self.pass_count = 0
         self.pickup_count = 0
@@ -97,13 +102,14 @@ class Doppelpass1DEnv(gym.Env):
     """
     metadata = {'render.modes': ['human']}
 
-    def __init__(self):
+    def __init__(self, random_placement=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
         self.num_agents = 2                 # No. agents in env - 2 for now
         self.obs_space_size = 20            # Size of 1d line [0, 20]
         self.pickup_range = 0.5             # Nhood to pick up/pass key in
         self.observation_range = 5          # Nhood observed by agents
         self.observation_resolution = 10    # Categorical obs bins in nhood
+        self.random_placement = random_placement  # Key & agent initialization
         self.done = None
 
         # SET MAX//MIN VELOCITY AND ACCELARATION
@@ -111,7 +117,12 @@ class Doppelpass1DEnv(gym.Env):
         self.a_bounds = [-0.5, 0.5]         # Clip acceleration into range
 
         # SET OBSERVATION AND ACTION SPACE
-        self.observation_space = spaces.Box(low=0, high=self.obs_space_size, shape=(1,), dtype=np.float32)
+        self.observation_space = spaces.Tuple([spaces.Box(low=0, high=self.obs_space_size, shape=(1,), dtype=np.float32),
+                                               spaces.Box(low=self.v_bounds[0], high=self.v_bounds[1], shape=(1,), dtype=np.float32),
+                                               spaces.Discrete(1000),
+                                               spaces.Box(low=0,
+                                                          high=1,
+                                                          shape=(3*self.observation_resolution,), dtype=np.int16)])
         self.action_space = spaces.Tuple([spaces.Box(low=self.a_bounds[0], high=self.a_bounds[1], shape=(1,), dtype=np.float32),
                                           spaces.Discrete(2), spaces.Discrete(2), spaces.Discrete(2)])
 
@@ -129,16 +140,23 @@ class Doppelpass1DEnv(gym.Env):
         self.goal_reach_reward     = 10     # R - key + 2 passes brought to goal
 
         # INITIALIZE THE KEY
-        self.key = key_to_goal(self.obs_space_size, self.pickup_range)
+        self.key = key_to_goal(self.obs_space_size, self.pickup_range,
+                               self.random_placement)
 
     def reset(self):
         """
         Sample initial placement of agents on straight line w. no velocity
         """
         self.key.initialize_key()
-        self.agents_positions = np.random.uniform(low=0,
-                                                  high=self.obs_space_size,
-                                                  size=self.num_agents)
+
+        if self.random_placement:
+            self.agents_positions = np.random.uniform(low=0,
+                                                      high=self.obs_space_size,
+                                                      size=self.num_agents)
+        else:
+            self.agents_positions = np.linspace(0, self.obs_space_size,
+                                                self.num_agents)
+
         self.agents_velocities = np.repeat(0., self.num_agents)
 
         # CONSTRUCT STATE - FULLY OBS & CONSTRUCT OBSERVATION - PARTIALLY OBS
@@ -150,7 +168,7 @@ class Doppelpass1DEnv(gym.Env):
     def step(self, action):
         """
         Perform a state transition/reward calculation based on selected action
-        -> action: 3d array. 1d = accel, 2d = pickup boolean, 3d = pass boolean
+        -> action: 4d array => 1d = accel, 2d = pickup boolean, 3d = putdown boolean, 4d = pass boolean
         """
         if self.done:
             raise RuntimeError("Episode has finished. Call env.reset() to start a new episode.")
