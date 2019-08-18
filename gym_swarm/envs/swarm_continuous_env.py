@@ -165,7 +165,7 @@ class Predator():
                                         self.obs_space_size)
 
 
-class SwarmEnv(gym.Env):
+class DiscreteSwarmEnv(gym.Env):
     """
     Main Complex Swarm Environment
     In: Default env parameters
