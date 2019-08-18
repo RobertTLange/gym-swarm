@@ -133,11 +133,11 @@ class Doppelpass1DEnv(gym.Env):
         # SET REWARD FUNCTION PARAMETERS - pickup, pass, put down
         # NOTE: Pass is defined as exchange of ownership
         self.wrong_pickup_reward   = -1     # R - wrong attempt to pick up key
-        self.correct_pickup_reward = 2      # R - picking up key
+        self.correct_pickup_reward = 5      # R - picking up key
         self.wrong_pass_reward     = -1     # R - wrong attempt to exchange key
-        self.correct_pass_reward   = 2      # R - exchanging key between agents
+        self.correct_pass_reward   = 5      # R - exchanging key between agents
         self.wrong_putdown_reward  = -1     # R - wrong attempt to putdown key
-        self.goal_reach_reward     = 10     # R - key + 2 passes brought to goal
+        self.goal_reach_reward     = 20     # R - key + 2 passes brought to goal
 
         # INITIALIZE THE KEY
         self.key = key_to_goal(self.obs_space_size, self.pickup_range,
@@ -304,8 +304,7 @@ class Doppelpass1DEnv(gym.Env):
                 reward[agent_id] += self.wrong_putdown_reward
         return reward, done
 
-    def set_env_params(self, env_params=None, reward_params=None,
-                       random_placement=False):
+    def set_env_params(self, env_params=None, reward_params=None):
         # SET INITIAL ENVIRONMENT PARAMETERS
         if env_params is not None:
             self.obs_space_size = env_params["obs_space_size"]
@@ -322,9 +321,10 @@ class Doppelpass1DEnv(gym.Env):
             self.action_space = spaces.Tuple([spaces.Box(low=self.a_bounds[0], high=self.a_bounds[1], shape=(1,), dtype=np.float32),
                                               spaces.Discrete(2), spaces.Discrete(2), spaces.Discrete(2)])
 
-            # FIX GOAL POSITION TO BE AT BORDER OF ENV - SAMPLE LATER ON
+            # SET GOAL POSITION, REQUIRED KEY PASSES & RANDOM PLACEMENT
             self.goal = env_params["goal"]
             self.required_key_passes = env_params["required_key_passes"]
+            self.random_placement = env_params["random_placement"]
 
         # SET REWARD FUNCTION PARAMETERS - pickup, pass, put down
         if reward_params is not None:
@@ -335,8 +335,7 @@ class Doppelpass1DEnv(gym.Env):
             self.wrong_putdown_reward  = reward_params["wrong_putdown_reward"]
             self.goal_reach_reward     = reward_params["goal_reach_reward"]
 
-        # SET RANDOM PLACEMENT BOOLEAN PARAM
-        self.random_placement = random_placement
+        print("Set Environment Parameters to Non-Default Setting")
         return
 
     def render(self, mode='rgb_array', close=False):
