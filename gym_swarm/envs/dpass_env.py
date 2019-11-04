@@ -304,7 +304,7 @@ class Doppelpass1DEnv(gym.Env):
                 reward[agent_id] += self.wrong_putdown_reward
         return reward, done
 
-    def set_env_params(self, env_params=None, reward_params=None):
+    def set_env_params(self, env_params=None, reward_params=None, verbose=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
         if env_params is not None:
             self.obs_space_size = env_params["obs_space_size"]
@@ -335,7 +335,8 @@ class Doppelpass1DEnv(gym.Env):
             self.wrong_putdown_reward  = reward_params["wrong_putdown_reward"]
             self.goal_reach_reward     = reward_params["goal_reach_reward"]
 
-        print("Set Environment Parameters to Non-Default Setting")
+        if verbose:
+            print("Set Environment Parameters to Non-Default Setting")
         return
 
     def render(self, mode='rgb_array', close=False):

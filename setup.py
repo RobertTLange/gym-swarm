@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setup(name='gym_swarm',
       version='0.0.1',
       author='Robert Tjrako Lange',
-      author_email='robert.t.lange@web.de',
+      author_email='robert.t.lange@tu-berlin.de',
       license='MIT',
       description="An OpenAI Gym Environment for Complex Swarm Behavior.",
       long_description=long_description,

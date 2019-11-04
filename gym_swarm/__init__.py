@@ -22,3 +22,8 @@ register(
     id='Doppelpass-v0',
     entry_point='gym_swarm.envs:Doppelpass1DEnv',
 )
+
+register(
+    id='Vision-v0',
+    entry_point='gym_swarm.envs:FilterGridworldEnv',
+)
