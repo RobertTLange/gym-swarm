@@ -17,8 +17,9 @@ class FilterGridworldEnv(gym.Env):
     def __init__(self, random_placement=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
         self.num_agents = 2                       # No. agents/kernels in env
-        self.gridsize = 20                        # Size of 2d grid [0, 20]
-        self.filtersize = 3                       # Assert that uneven
+        self.grid_size = 20                       # Size of 2d grid [0, 20]
+        self.filter_size = 3                      # Assert that uneven
+        self.obs_size = 5                         # Obssquare centered on agent
         self.random_placement = random_placement  # Random placement at reset
         self.done = None
 
@@ -26,7 +27,7 @@ class FilterGridworldEnv(gym.Env):
         self.wall_bump_reward = -0.05
 
         # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
-        self.observation_space = spaces.Box(low=0, high=self.gridsize,
+        self.observation_space = spaces.Box(low=0, high=self.grid_size,
                                             shape=(self.num_agents, 2),
                                             dtype=np.int)
         self.action_space = spaces.Discrete(5)
@@ -34,46 +35,46 @@ class FilterGridworldEnv(gym.Env):
         # SAMPLE A SET OF FILTERS FOR THE AGENTS
         self.reward_filters = {}
         for agent_id in range(self.num_agents):
-            self.reward_filters[agent_id] = np.random.randint(0, 255, self.filtersize**2).reshape((self.filtersize, self.filtersize))/255
+            self.reward_filters[agent_id] = np.random.randint(0, 255, self.filter_size**2).reshape((self.filter_size, self.filter_size))/255
 
         # PLACE FILTERS IN THE ENVIRONMENT & COMPUTE AGENT-SPECIFIC REWARD FCT
         self.place_filters()
         self.compute_reward_function()
 
     def place_filters(self):
-        self.state_grid = np.zeros((self.gridsize, self.gridsize))
+        self.state_grid = np.zeros((self.grid_size, self.grid_size))
         # Place the filters in grid randomly - make sure there is no overlap
         x_hist, y_hist = [], []
         for agent_id in range(self.num_agents):
             while True:
-                x_start = np.random.randint(0, self.gridsize - self.filtersize, 1).astype(int)[0]
-                y_start = np.random.randint(0, self.gridsize - self.filtersize, 1).astype(int)[0]
+                x_start = np.random.randint(0, self.grid_size - self.filter_size, 1).astype(int)[0]
+                y_start = np.random.randint(0, self.grid_size - self.filter_size, 1).astype(int)[0]
                 # Check for overlap with other grids already placed in env
                 if 1:
                     # TODO: Implement resampling if there is filter overlap
                     break
-            self.state_grid[x_start:x_start+self.filtersize, y_start:y_start+self.filtersize] = self.reward_filters[agent_id]
+            self.state_grid[x_start:x_start+self.filter_size, y_start:y_start+self.filter_size] = self.reward_filters[agent_id]
 
     def compute_reward_function(self):
         # Compute padded version of gridworld to convolute over it
-        padded_grid = zero_pad(self.state_grid, (self.gridsize+self.filtersize-1,
-                                                 self.gridsize+self.filtersize-1),
-                               [int((self.filtersize-1)/2), int((self.filtersize-1)/2)])
+        padded_grid = zero_pad(self.state_grid, (self.grid_size+self.filter_size-1,
+                                                 self.grid_size+self.filter_size-1),
+                               [int((self.filter_size-1)/2), int((self.filter_size-1)/2)])
         self.reward_function = {}
         # Loop over all agents and convolute with each agent-specific kernel
         for agent_id in range(self.num_agents):
-            activation_grid = np.zeros((self.gridsize, self.gridsize))
+            activation_grid = np.zeros((self.grid_size, self.grid_size))
             # Compute the convolution
-            for i in range(self.gridsize):
-                for j in range(self.gridsize):
-                    activation_grid[i, j] = np.multiply(padded_grid[i:i+self.filtersize,
-                                                                    j:j+self.filtersize],
+            for i in range(self.grid_size):
+                for j in range(self.grid_size):
+                    activation_grid[i, j] = np.multiply(padded_grid[i:i+self.filter_size,
+                                                                    j:j+self.filter_size],
                                                         self.reward_filters[agent_id]).sum()
             self.reward_function[agent_id] = activation_grid
 
     def reset(self):
         """
-        Sample initial placement of agents on straight line w. no velocity
+        Sample initial placement of agents & the corresponding observation
         """
         if self.random_placement:
             self.place_filters()
@@ -82,8 +83,50 @@ class FilterGridworldEnv(gym.Env):
         # CONSTRUCT STATE - FULLY OBS & CONSTRUCT OBSERVATION - PARTIALLY OBS
         self.current_state = {}
         for agent_id in range(self.num_agents):
-            self.current_state[agent_id] = np.random.randint(0, self.gridsize, 2)
-        return self.current_state
+            self.current_state[agent_id] = np.random.randint(0, self.grid_size, 2)
+
+        self.current_obs = self.state_to_obs()
+        return self.current_obs
+
+    def state_to_obs(self):
+        """
+        Transform the state into observations issued to the agents
+            - obs_size x obs_size grid centered on the agent
+        """
+        obs = {}
+        for agent_id in range(self.num_agents):
+            x_start = max(0, int(self.current_state[agent_id][0]-(self.filter_size-1)/2))
+            x_stop = min(self.grid_size, int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1))
+            y_start = max(0, int(self.current_state[agent_id][1]-(self.filter_size-1)/2))
+            y_stop = min(self.grid_size, int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1))
+
+            obs_temp = self.state_grid[x_start:x_stop, y_start:y_stop]
+
+            temp_rows_top = int(self.current_state[agent_id][0]-(self.filter_size-1)/2)
+            if temp_rows_top < 0:
+                add_rows_top = -1*temp_rows_top
+                obs_temp = np.concatenate((-1+ np.zeros((add_rows_top, self.filter_size)),
+                                           obs_temp), axis=0)
+
+            temp_rows_bottom = int(self.current_state[agent_id][0]+(self.filter_size-1)/2)
+            if temp_rows_bottom > self.grid_size:
+                add_rows_bottom = temp_rows_bottom - self.grid_size
+                obs_temp = np.concatenate((obs_temp,
+                                           -1 + np.zeros((add_rows_bottom, self.filter_size))), axis=0)
+
+            temp_cols_left = int(self.current_state[agent_id][1]-(self.filter_size-1)/2)
+            if temp_cols_left < 0:
+                add_cols_left = -1*temp_cols_left
+                obs_temp = np.concatenate((-1 + np.zeros((self.filter_size, add_cols_left)),
+                                           obs_temp), axis=1)
+
+            temp_cols_right = int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1)
+            if temp_cols_right > self.grid_size:
+                add_cols_right = temp_cols_right - self.grid_size
+                obs_temp = np.concatenate((obs_temp,
+                                           -1 + np.zeros((self.filter_size, add_cols_right))), axis=1)
+            obs[agent_id] = obs_temp
+        return obs
 
     def step(self, action):
         """
@@ -99,7 +142,7 @@ class FilterGridworldEnv(gym.Env):
             # 0 - U, 1 - D, 2 - L, 3 - R, 4 - S
             agent_state = self.current_state[agent_id].copy()
             if agent_action == 0:   # Up Action Execution
-                if agent_state[1] < self.gridsize - 1:
+                if agent_state[1] < self.grid_size - 1:
                     agent_state[1] +=1
                 else:
                     wall_bump[agent_id] = 1
@@ -114,17 +157,18 @@ class FilterGridworldEnv(gym.Env):
                 else:
                     wall_bump[agent_id] = 1
             elif agent_action == 3: # Right Action Execution
-                if agent_state[0] < self.gridsize - 1:
+                if agent_state[0] < self.grid_size - 1:
                     agent_state[0] +=1
                 else:
                     wall_bump[agent_id] = 1
             next_state[agent_id] = agent_state
 
         self.current_state = next_state
+        self.current_obs = self.state_to_obs()
         # Calculate the reward based on the transition and return meta info
         reward, self.done = self.state_reward(wall_bump)
         info = {"warnings": None}
-        return self.current_state, reward, self.done, info
+        return self.current_obs, reward, self.done, info
 
     def state_reward(self, wall_bump):
         """
@@ -134,6 +178,7 @@ class FilterGridworldEnv(gym.Env):
         done = False
         reward = {i: 0 for i in range(self.num_agents)}
 
+        # Loop over agents: Get specific rews - based on normalized activation
         for agent_id in range(self.num_agents):
             reward[agent_id] += self.reward_function[agent_id][self.current_state[agent_id][0], self.current_state[agent_id][1]]
             reward[agent_id] += self.wall_bump_reward*wall_bump[agent_id]
@@ -150,12 +195,11 @@ class FilterGridworldEnv(gym.Env):
 
         plot_grid = self.state_grid.copy()
         for agent_id in range(self.num_agents):
-            x_start = int(self.current_state[agent_id][0]-(self.filtersize-1)/2)
-            x_stop = int(self.current_state[agent_id][0]+(self.filtersize-1)/2 + 1)
-            y_start = int(self.current_state[agent_id][1]-(self.filtersize-1)/2)
-            y_stop = int(self.current_state[agent_id][1]+(self.filtersize-1)/2 + 1)
-            # TODO: Add exception for corner padding case!
-            plot_grid[x_start:x_stop, y_start:y_stop] = self.reward_filters[agent_id]/2
+            x_start = max(0, int(self.current_state[agent_id][0]-(self.filter_size-1)/2))
+            x_stop = min(self.grid_size, int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1))
+            y_start = max(0, int(self.current_state[agent_id][1]-(self.filter_size-1)/2))
+            y_stop = min(self.grid_size, int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1))
+            plot_grid[x_start : x_stop, y_start : y_stop] = self.reward_filters[agent_id][0 : (x_stop - x_start), 0 : (y_stop - y_start)]/2
         axs.imshow(frame_image(plot_grid, 1), cmap="Greys")
 
         for agent_id in range(self.num_agents):
@@ -164,6 +208,14 @@ class FilterGridworldEnv(gym.Env):
             axs.add_artist(circle)
         axs.set_axis_off()
         return
+
+    def render_reward(self):
+        fig, axs = plt.subplots(1, self.num_agents, figsize=(8, 5))
+        for agent_id in range(self.num_agents):
+            act_rgb = to_rgb(self.reward_function[agent_id], self.gridsize)
+            axs[i].imshow(frame_image(act_rgb, 1), cmap="Greys")
+            axs[i].set_title('Rewards Agent ' + str(agent_id))
+            axs[i].set_axis_off()
 
 
 def zero_pad(array, ref_shape, offsets):
@@ -191,9 +243,9 @@ def frame_image(img, frame_width):
     framed_img[b:-b, b:-b] = img
     return framed_img
 
-def to_rgb(grid, gridsize):
+def to_rgb(grid, grid_size):
     # RGB Heatmap visualisation
-    grid3d = np.zeros((gridsize, gridsize, 3))
+    grid3d = np.zeros((grid_size, grid_size, 3))
     x, y = np.where(grid!=0)
     x2, y2 = np.where(grid==0)
     grid3d[x, y, 0] = np.max(grid[x, y])-grid[x, y]

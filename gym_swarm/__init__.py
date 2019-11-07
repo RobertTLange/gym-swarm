@@ -27,3 +27,8 @@ register(
     id='FilterGrid-v0',
     entry_point='gym_swarm.envs:FilterGridworldEnv',
 )
+
+register(
+    id='MultiAgentGrid-v0',
+    entry_point='gym_swarm.envs:MultiAgentGridworldEnv',
+)
