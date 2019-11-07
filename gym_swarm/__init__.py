@@ -24,6 +24,6 @@ register(
 )
 
 register(
-    id='Vision-v0',
+    id='FilterGrid-v0',
     entry_point='gym_swarm.envs:FilterGridworldEnv',
 )
