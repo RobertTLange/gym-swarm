@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 class FilterGridworldEnv(gym.Env):
     """
     Learning to Communicate Filter Positions
+    TODO: Make it possible to load in parts of image & equip agents with filters
     """
     # metadata = {'render.modes': ['human']}
 
@@ -44,16 +45,21 @@ class FilterGridworldEnv(gym.Env):
     def place_filters(self):
         self.state_grid = np.zeros((self.grid_size, self.grid_size))
         # Place the filters in grid randomly - make sure there is no overlap
-        x_hist, y_hist = [], []
+        filled_fields = []
+        coords = []
         for agent_id in range(self.num_agents):
             while True:
-                x_start = np.random.randint(0, self.grid_size - self.filter_size, 1).astype(int)[0]
-                y_start = np.random.randint(0, self.grid_size - self.filter_size, 1).astype(int)[0]
-                # Check for overlap with other grids already placed in env
-                if 1:
-                    # TODO: Implement resampling if there is filter overlap
+                start_coord = np.random.randint(0, self.grid_size - self.filter_size, 2).astype(int)
+                new_x = list(range(start_coord[0], start_coord[0]+self.filter_size))
+                new_y = list(range(start_coord[1], start_coord[1]+self.filter_size))
+                new_grid = [(x, y) for x in new_x for y in new_y]
+                if len(set(filled_fields) & set(new_grid)) == 0:
+                    filled_fields.extend(new_grid)
+                    coords.append(start_coord)
                     break
-            self.state_grid[x_start:x_start+self.filter_size, y_start:y_start+self.filter_size] = self.reward_filters[agent_id]
+
+        for agent_id in range(self.num_agents):
+            self.state_grid[coords[agent_id][0]:coords[agent_id][0]+self.filter_size, coords[agent_id][1]:coords[agent_id][1]+self.filter_size] = self.reward_filters[agent_id]
 
     def compute_reward_function(self):
         # Compute padded version of gridworld to convolute over it
@@ -82,8 +88,14 @@ class FilterGridworldEnv(gym.Env):
 
         # CONSTRUCT STATE - FULLY OBS & CONSTRUCT OBSERVATION - PARTIALLY OBS
         self.current_state = {}
+        coords = []
         for agent_id in range(self.num_agents):
-            self.current_state[agent_id] = np.random.randint(0, self.grid_size, 2)
+            while True:
+                new_coords = np.random.randint(0, self.grid_size, 2).astype(int)
+                if len(set(tuple(new_coords)) & set(coords)) == 0:
+                    self.current_state[agent_id] = new_coords
+                    coords.extend(new_coords.tolist())
+                    break
 
         self.current_obs = self.state_to_obs()
         return self.current_obs
@@ -92,6 +104,8 @@ class FilterGridworldEnv(gym.Env):
         """
         Transform the state into observations issued to the agents
             - obs_size x obs_size grid centered on the agent
+            - Important perform the padding for the agents
+        TODO: jit this with numba!
         """
         obs = {}
         for agent_id in range(self.num_agents):
@@ -182,17 +196,18 @@ class FilterGridworldEnv(gym.Env):
         for agent_id in range(self.num_agents):
             reward[agent_id] += self.reward_function[agent_id][self.current_state[agent_id][0], self.current_state[agent_id][1]]
             reward[agent_id] += self.wall_bump_reward*wall_bump[agent_id]
+
+        # TODO: Formulate termination condition!
         return reward, done
 
     def set_env_params(self, env_params=None, verbose=False):
+        # TODO: Allow to set gridsize, number of agents, random filters?!
         return
 
-    def render(self, mode='rgb_array', close=False):
+    def render(self, axs):
         """
         Render the environment state
         """
-        fig, axs = plt.subplots(1, 1, figsize=(8, 5))
-
         plot_grid = self.state_grid.copy()
         for agent_id in range(self.num_agents):
             x_start = max(0, int(self.current_state[agent_id][0]-(self.filter_size-1)/2))
@@ -206,16 +221,16 @@ class FilterGridworldEnv(gym.Env):
             temp_state = (self.current_state[agent_id][1]+1, self.current_state[agent_id][0]+1)
             circle = plt.Circle(temp_state, radius=0.25, color="blue")
             axs.add_artist(circle)
+        axs.set_title("Environment State")
         axs.set_axis_off()
         return
 
-    def render_reward(self):
-        fig, axs = plt.subplots(1, self.num_agents, figsize=(8, 5))
+    def render_reward(self, axs):
         for agent_id in range(self.num_agents):
-            act_rgb = to_rgb(self.reward_function[agent_id], self.gridsize)
-            axs[i].imshow(frame_image(act_rgb, 1), cmap="Greys")
-            axs[i].set_title('Rewards Agent ' + str(agent_id))
-            axs[i].set_axis_off()
+            act_rgb = to_rgb(self.reward_function[agent_id], self.grid_size)
+            axs[agent_id].imshow(frame_image(act_rgb, 1), cmap="Greys")
+            axs[agent_id].set_title('Rewards Agent ' + str(agent_id + 1))
+            axs[agent_id].set_axis_off()
 
 
 def zero_pad(array, ref_shape, offsets):
