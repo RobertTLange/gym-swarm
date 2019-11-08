@@ -58,8 +58,11 @@ class FilterGridworldEnv(gym.Env):
                     coords.append(start_coord)
                     break
 
+        self.optimal_locations = {}
         for agent_id in range(self.num_agents):
             self.state_grid[coords[agent_id][0]:coords[agent_id][0]+self.filter_size, coords[agent_id][1]:coords[agent_id][1]+self.filter_size] = self.reward_filters[agent_id]
+            self.optimal_locations[agent_id] = [coords[agent_id][0] + (self.filter_size/2)-1,
+                                                coords[agent_id][1] + (self.filter_size/2)-1]
 
     def compute_reward_function(self):
         # Compute padded version of gridworld to convolute over it
@@ -193,11 +196,17 @@ class FilterGridworldEnv(gym.Env):
         reward = {i: 0 for i in range(self.num_agents)}
 
         # Loop over agents: Get specific rews - based on normalized activation
+        no_agent_at_optimal_position = 0
         for agent_id in range(self.num_agents):
             reward[agent_id] += self.reward_function[agent_id][self.current_state[agent_id][0], self.current_state[agent_id][1]]
             reward[agent_id] += self.wall_bump_reward*wall_bump[agent_id]
 
-        # TODO: Formulate termination condition!
+            if (self.current_state[agent_id] == self.optimal_locations[agent_id]).all():
+                no_agent_at_optimal_position += 1
+
+        # Terminate the episode if all agents are at their optimal positions 
+        if no_agent_at_optimal_position == self.num_agents:
+            done = True
         return reward, done
 
     def set_env_params(self, env_params=None, verbose=False):
