@@ -12,35 +12,27 @@ class FilterGridworldEnv(gym.Env):
     """
     Learning to Communicate Filter Positions
     TODO: Make it possible to load in parts of image & equip agents with filters
+    TODO: Add a bunch of assert statements that make sure filter are uneven, etc.
+    TODO: Allow for sampling of walls
+    TODO: jit functions for speedup
     """
     # metadata = {'render.modes': ['human']}
 
     def __init__(self, random_placement=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
-        self.num_agents = 2                       # No. agents/kernels in env
-        self.grid_size = 20                       # Size of 2d grid [0, 20]
-        self.filter_size = 3                      # Assert that uneven
-        self.obs_size = 5                         # Obssquare centered on agent
-        self.random_placement = random_placement  # Random placement at reset
-        self.done = None
+        default_params = {'num_agents': 2,
+                          'grid_size': 20,
+                          'filter_size': 3,
+                          'obs_size': 5,
+                          'random_placement': False,
+                          'wall_bump_reward': -0.05}
+        self.set_env_params(default_params)
 
-        # SET REWARD PARAMETERS
-        self.wall_bump_reward = -0.05
-
-        # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
-        self.observation_space = spaces.Box(low=0, high=self.grid_size,
-                                            shape=(self.num_agents, 2),
-                                            dtype=np.int)
-        self.action_space = spaces.Discrete(5)
-
+    def init_filters(self):
         # SAMPLE A SET OF FILTERS FOR THE AGENTS
         self.reward_filters = {}
         for agent_id in range(self.num_agents):
             self.reward_filters[agent_id] = np.random.randint(0, 255, self.filter_size**2).reshape((self.filter_size, self.filter_size))/255
-
-        # PLACE FILTERS IN THE ENVIRONMENT & COMPUTE AGENT-SPECIFIC REWARD FCT
-        self.place_filters()
-        self.compute_reward_function()
 
     def place_filters(self):
         self.state_grid = np.zeros((self.grid_size, self.grid_size))
@@ -88,7 +80,12 @@ class FilterGridworldEnv(gym.Env):
         if self.random_placement:
             self.place_filters()
             self.compute_reward_function()
+            self.sample_init_state()
 
+        self.current_obs = self.state_to_obs()
+        return self.current_obs
+
+    def sample_init_state(self):
         # CONSTRUCT STATE - FULLY OBS & CONSTRUCT OBSERVATION - PARTIALLY OBS
         self.current_state = {}
         coords = []
@@ -99,9 +96,6 @@ class FilterGridworldEnv(gym.Env):
                     self.current_state[agent_id] = new_coords
                     coords.extend(new_coords.tolist())
                     break
-
-        self.current_obs = self.state_to_obs()
-        return self.current_obs
 
     def state_to_obs(self):
         """
@@ -134,10 +128,11 @@ class FilterGridworldEnv(gym.Env):
             temp_cols_left = int(self.current_state[agent_id][1]-(self.filter_size-1)/2)
             if temp_cols_left < 0:
                 add_cols_left = -1*temp_cols_left
-                obs_temp = np.concatenate((-1 + np.zeros((self.filter_size, add_cols_left)),
+                obs_temp = np.concatenate((-1 + np.zeros((obs_temp.shape[0], add_cols_left)),
                                            obs_temp), axis=1)
 
             temp_cols_right = int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1)
+
             if temp_cols_right > self.grid_size:
                 add_cols_right = temp_cols_right - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
@@ -204,13 +199,32 @@ class FilterGridworldEnv(gym.Env):
             if (self.current_state[agent_id] == self.optimal_locations[agent_id]).all():
                 no_agent_at_optimal_position += 1
 
-        # Terminate the episode if all agents are at their optimal positions 
+        # Terminate the episode if all agents are at their optimal positions
         if no_agent_at_optimal_position == self.num_agents:
             done = True
         return reward, done
 
     def set_env_params(self, env_params=None, verbose=False):
-        # TODO: Allow to set gridsize, number of agents, random filters?!
+        # SET INITIAL ENVIRONMENT PARAMETERS
+        self.num_agents = env_params['num_agents']              # No. agents/kernels in env
+        self.grid_size = env_params['grid_size']               # Size 2d grid [0, grid_size]
+        self.filter_size = env_params['filter_size']            # Assert that uneven
+        self.obs_size = env_params['obs_size']                  # Obssquare centered on agent
+        self.random_placement = env_params['random_placement']  # Random placement at reset
+        self.wall_bump_reward = env_params['wall_bump_reward']  # Wall bump reward
+
+        self.done = None
+        # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
+        self.observation_space = spaces.Box(low=0, high=self.grid_size,
+                                            shape=(self.num_agents, 2),
+                                            dtype=np.int)
+        self.action_space = spaces.Discrete(5)
+
+        # PLACE FILTERS IN THE ENVIRONMENT & COMPUTE AGENT-SPECIFIC REWARD FCT
+        self.init_filters()
+        self.place_filters()
+        self.compute_reward_function()
+        self.sample_init_state()
         return
 
     def render(self, axs):
