@@ -152,24 +152,24 @@ class FilterGridworldEnv(gym.Env):
         wall_bump = {i: 0 for i in range(self.num_agents)}
         next_state = {}
         for agent_id, agent_action in action.items():
-            # 0 - U, 1 - D, 2 - L, 3 - R, 4 - S
+            # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
             agent_state = self.current_state[agent_id].copy()
-            if agent_action == 0:   # Up Action Execution
+            if agent_action == 0:   # Right Action Execution
                 if agent_state[1] < self.grid_size - 1:
                     agent_state[1] +=1
                 else:
                     wall_bump[agent_id] = 1
-            elif agent_action == 1: # Down Action Execution
+            elif agent_action == 1: # Left Action Execution
                 if agent_state[1] > 0:
                     agent_state[1] -=1
                 else:
                     wall_bump[agent_id] = 1
-            elif agent_action == 2: # Left Action Execution
+            elif agent_action == 2: # Down Action Execution
                 if agent_state[0] > 0:
                     agent_state[0] -=1
                 else:
                     wall_bump[agent_id] = 1
-            elif agent_action == 3: # Right Action Execution
+            elif agent_action == 3: # Up Action Execution
                 if agent_state[0] < self.grid_size - 1:
                     agent_state[0] +=1
                 else:

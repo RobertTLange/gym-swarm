@@ -158,16 +158,15 @@ class MultiAgentGridworldEnv(gym.Env):
 
     def __init__(self, sample_env=False, random_placement=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
-        self.num_agents = 2                       # No. agents/kernels in env
-        self.grid_size = 20                       # Size of 2d grid [0, 20]
-        self.filter_size = 3                      # Assert that uneven
+        self.num_agents = 4                       # No. agents/kernels in env
+        self.grid_size = (25, 35)                 # Size of 2d grid [0, 20]
         self.obs_size = 5                         # Obssquare centered on agent
         self.random_placement = random_placement  # Random placement at reset
         self.done = None
         self.sample_env = sample_env
 
         if self.sample_env:
-            maze_art = generate_base_art(self.grid_size, self.grid_size)
+            maze_art = generate_base_art(self.grid_size[0], self.grid_size[1])
             maze_w_walls = sample_walls(maze_art, max_wall_len=5, num_walls=5)
             game_art = sample_players_initial_state(maze_w_walls,
                                                     num_agents=self.num_agents)
@@ -180,9 +179,6 @@ class MultiAgentGridworldEnv(gym.Env):
         self.wall_bump_reward = -0.05
 
         # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
-        self.observation_space = spaces.Box(low=0, high=self.grid_size,
-                                            shape=(self.num_agents, 2),
-                                            dtype=np.int)
         self.action_space = spaces.Discrete(5)
 
     def reset(self):
@@ -196,7 +192,13 @@ class MultiAgentGridworldEnv(gym.Env):
         obs = {}
         # As in Pycolab feed different channels out!
         for agent_id in range(self.num_agents):
-            obs[agent_id] = None
+            agent_index = self.objects.index(str(agent_id))
+            agent_state = np.where(self.state[:, :, agent_index]==1)
+            y_start = int(agent_state[0]-(self.obs_size-1)/2)
+            y_stop = int(agent_state[0]+(self.obs_size-1)/2)
+            x_start = int(agent_state[1]-(self.obs_size-1)/2)
+            x_stop = int(agent_state[1]+(self.obs_size-1)/2)
+            obs[agent_id] = self.state[y_start:y_stop, x_start:x_stop, :]
         return obs
 
     def step(self, action):
@@ -208,33 +210,32 @@ class MultiAgentGridworldEnv(gym.Env):
 
         # Update state of env and obs distributed to agents
         wall_bump = {i: 0 for i in range(self.num_agents)}
+        wall_index = self.objects.index("#")
+        wall_states = list(zip(*np.where(self.state[:, :, wall_index]==1)))
         next_state = {}
         for agent_id, agent_action in action.items():
-            # 0 - U, 1 - D, 2 - L, 3 - R, 4 - S
-            agent_state = self.current_state[agent_id].copy()
-            if agent_action == 0:   # Up Action Execution
-                if agent_state[1] < self.grid_size - 1:
-                    agent_state[1] +=1
-                else:
-                    wall_bump[agent_id] = 1
-            elif agent_action == 1: # Down Action Execution
-                if agent_state[1] > 0:
-                    agent_state[1] -=1
-                else:
-                    wall_bump[agent_id] = 1
-            elif agent_action == 2: # Left Action Execution
-                if agent_state[0] > 0:
-                    agent_state[0] -=1
-                else:
-                    wall_bump[agent_id] = 1
-            elif agent_action == 3: # Right Action Execution
-                if agent_state[0] < self.grid_size - 1:
-                    agent_state[0] +=1
-                else:
-                    wall_bump[agent_id] = 1
-            next_state[agent_id] = agent_state
+            # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
+            agent_index = self.objects.index(str(agent_id))
+            agent_state_old = np.where(self.state[:, :, agent_index] == 1)
+            agent_state_new = [agent_state_old[0][0], agent_state_old[1][0]]
+            if agent_action == 0:   # Right Action Execution
+                agent_state_new[1] = agent_state_old[1][0] + 1
+            elif agent_action == 1: # Left Action Execution
+                agent_state_new[1] = agent_state_old[1][0] - 1
+            elif agent_action == 2: # Down Action Execution
+                agent_state_new[0] = agent_state_old[0][0] - 1
+            elif agent_action == 3: # Up Action Execution
+                agent_state_new[0] = agent_state_old[0][0] + 1
 
-        self.current_state = next_state
+            if tuple(agent_state_new) in wall_states:
+                # Agent bumped into wall - revert and track index!
+                agent_state_new = agent_state_old
+                wall_bump[agent_id] = 1
+            else:
+                # Otherwise perform the state transition
+                self.state[agent_state_old[0], agent_state_old[1], agent_index] = 0
+                self.state[agent_state_new[0], agent_state_new[1], agent_index] = 1
+
         self.current_obs = self.state_to_obs()
         # Calculate the reward based on the transition and return meta info
         reward, self.done = self.state_reward(wall_bump)
@@ -260,15 +261,15 @@ class MultiAgentGridworldEnv(gym.Env):
     def render(self, axs):
         base_idx = self.objects.index("#")
         background_base = self.state[:, :, base_idx]
-        state_temp = self.state[:, :, :]
+        state_temp = self.state.copy()[:, :, :]
 
         x, y = np.where(background_base == 0)
-        state_temp[x, y, 2] = 255
+        state_temp[x, y, base_idx] = 255
         x, y = np.where(background_base == 1)
-        state_temp[x, y, 2] = 20/255
+        state_temp[x, y, base_idx] = 20/255
 
         # Plot the base background
-        axs.imshow(self.state[:, :, 2])
+        axs.imshow(state_temp[:, :, base_idx])
         axs.set_axis_off()
 
         for i, obj in enumerate(self.objects):
