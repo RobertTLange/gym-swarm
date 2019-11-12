@@ -116,14 +116,14 @@ class FilterGridworldEnv(gym.Env):
             temp_rows_top = int(self.current_state[agent_id][0]-(self.filter_size-1)/2)
             if temp_rows_top < 0:
                 add_rows_top = -1*temp_rows_top
-                obs_temp = np.concatenate((-1+ np.zeros((add_rows_top, self.filter_size)),
+                obs_temp = np.concatenate((-1+ np.zeros((add_rows_top, obs_temp.shape[1])),
                                            obs_temp), axis=0)
 
             temp_rows_bottom = int(self.current_state[agent_id][0]+(self.filter_size-1)/2)
             if temp_rows_bottom > self.grid_size:
                 add_rows_bottom = temp_rows_bottom - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
-                                           -1 + np.zeros((add_rows_bottom, self.filter_size))), axis=0)
+                                           -1 + np.zeros((add_rows_bottom, obs_temp.shape[1]))), axis=0)
 
             temp_cols_left = int(self.current_state[agent_id][1]-(self.filter_size-1)/2)
             if temp_cols_left < 0:
@@ -136,7 +136,8 @@ class FilterGridworldEnv(gym.Env):
             if temp_cols_right > self.grid_size:
                 add_cols_right = temp_cols_right - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
-                                           -1 + np.zeros((self.filter_size, add_cols_right))), axis=1)
+                                           -1 + np.zeros((obs_temp.shape[0], add_cols_right))), axis=1)
+            # print(temp_rows_top, temp_rows_bottom, temp_cols_left, temp_cols_right)
             obs[agent_id] = obs_temp
         return obs
 
@@ -231,15 +232,19 @@ class FilterGridworldEnv(gym.Env):
         """
         Render the environment state
         """
+        # Get the basic environment layout
         plot_grid = self.state_grid.copy()
+        # Plot agent filters in their location
         for agent_id in range(self.num_agents):
             x_start = max(0, int(self.current_state[agent_id][0]-(self.filter_size-1)/2))
             x_stop = min(self.grid_size, int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1))
             y_start = max(0, int(self.current_state[agent_id][1]-(self.filter_size-1)/2))
             y_stop = min(self.grid_size, int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1))
             plot_grid[x_start : x_stop, y_start : y_stop] = self.reward_filters[agent_id][0 : (x_stop - x_start), 0 : (y_stop - y_start)]/2
+
         axs.imshow(frame_image(plot_grid, 1), cmap="Greys")
 
+        # Put blue circle at center of state of agent
         for agent_id in range(self.num_agents):
             temp_state = (self.current_state[agent_id][1]+1, self.current_state[agent_id][0]+1)
             circle = plt.Circle(temp_state, radius=0.25, color="blue")

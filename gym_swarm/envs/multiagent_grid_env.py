@@ -83,13 +83,80 @@ def sample_players_initial_state(current_art, num_agents=2):
         maze_w_players[player_new_row] = maze_w_players[player_new_row][:player_new_col] + str(agent_id) + maze_w_players[player_new_row][player_new_col+1:]
     return maze_w_players
 
+
+def art_to_array(game_art):
+    # Create a state array on which to act on!
+    all_elements = set()
+    for i in range(len(game_art)):
+        temp = set(game_art[i])
+        all_elements = all_elements | temp
+    objects = list(all_elements)
+    objects.remove(" ")
+
+    y_dim = len(game_art[0])
+    x_dim = len(game_art)
+    state_array = np.zeros((x_dim, y_dim, len(objects)))
+    print
+    for row in range(state_array.shape[0]):
+        for col in range(state_array.shape[1]):
+            for i, obj in enumerate(objects):
+                if game_art[row][col] == obj:
+                    state_array[row, col, i] = 1
+    return objects, state_array
+
+
+def rgb_rescale(v):
+    return v/255
+
+
+COLOUR_FG = {' ': tuple([rgb_rescale(v) for v in (255, 255, 255)]),  # Background
+             '#': tuple([rgb_rescale(v) for v in (20, 20, 20)]),     # Walls of the maze
+             '0': tuple([rgb_rescale(v) for v in (214, 182, 79)]),   # Players
+             '1': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
+             '2': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
+             '3': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
+             '4': tuple([rgb_rescale(v) for v in   (214, 182, 79)]),   # Players
+             '5': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
+             '6': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
+             '7': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
+             '8': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
+             'G': tuple([rgb_rescale(v) for v in (0, 100, 0)])         # Goal State
+             }
+
+# 25x35x6 Base Maze Gridworld for the Fish Environment
+default_maze = ["###################################",
+                "#01         #                     #",
+                "#23         #                     #",
+                "#           #                     #",
+                "#       #####   #############     #",
+                "#               #           #     #",
+                "#####           #           #     #",
+                "#####           #           #     #",
+                "#####   #########    ####         #",
+                "#####   #            #            #",
+                "#####   #            #            #",
+                "#########            #            #",
+                "#####       #####    ##########   #",
+                "#####       #        #        #   #",
+                "#####       #        #        #   #",
+                "#####       #        #        #   #",
+                "#####    #############   #    #####",
+                "#####                    #        #",
+                "#####                    #        #",
+                "#####                    #        #",
+                "#####    #####################    #",
+                "#####                    #        #",
+                "#####                    #      GG#",
+                "#####                    #      GG#",
+                "###################################"]
+
 class MultiAgentGridworldEnv(gym.Env):
     """
-    Learning to Communicate Filter Positions
+    Learning MA Coordination in a Grid World
     """
     # metadata = {'render.modes': ['human']}
 
-    def __init__(self, random_placement=False):
+    def __init__(self, sample_env=False, random_placement=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
         self.num_agents = 2                       # No. agents/kernels in env
         self.grid_size = 20                       # Size of 2d grid [0, 20]
@@ -97,6 +164,17 @@ class MultiAgentGridworldEnv(gym.Env):
         self.obs_size = 5                         # Obssquare centered on agent
         self.random_placement = random_placement  # Random placement at reset
         self.done = None
+        self.sample_env = sample_env
+
+        if self.sample_env:
+            maze_art = generate_base_art(self.grid_size, self.grid_size)
+            maze_w_walls = sample_walls(maze_art, max_wall_len=5, num_walls=5)
+            game_art = sample_players_initial_state(maze_w_walls,
+                                                    num_agents=self.num_agents)
+        else:
+            game_art = default_maze[:]
+
+        self.objects, self.state = art_to_array(game_art)
 
         # SET REWARD PARAMETERS
         self.wall_bump_reward = -0.05
@@ -107,49 +185,18 @@ class MultiAgentGridworldEnv(gym.Env):
                                             dtype=np.int)
         self.action_space = spaces.Discrete(5)
 
-        # SAMPLE A SET OF FILTERS FOR THE AGENTS
-        self.reward_filters = {}
-        for agent_id in range(self.num_agents):
-            self.reward_filters[agent_id] = np.random.randint(0, 255, self.filter_size**2).reshape((self.filter_size, self.filter_size))/255
-
-        # PLACE FILTERS IN THE ENVIRONMENT & COMPUTE AGENT-SPECIFIC REWARD FCT
-        self.place_filters()
-        self.compute_reward_function()
-
-    def compute_reward_function(self):
-        # Compute padded version of gridworld to convolute over it
-        padded_grid = zero_pad(self.state_grid, (self.grid_size+self.filter_size-1,
-                                                 self.grid_size+self.filter_size-1),
-                               [int((self.filter_size-1)/2), int((self.filter_size-1)/2)])
-        self.reward_function = {}
-        # Loop over all agents and convolute with each agent-specific kernel
-        for agent_id in range(self.num_agents):
-            activation_grid = np.zeros((self.grid_size, self.grid_size))
-            # Compute the convolution
-            for i in range(self.grid_size):
-                for j in range(self.grid_size):
-                    activation_grid[i, j] = np.multiply(padded_grid[i:i+self.filter_size,
-                                                                    j:j+self.filter_size],
-                                                        self.reward_filters[agent_id]).sum()
-            self.reward_function[agent_id] = activation_grid
-
     def reset(self):
         """
         Sample initial placement of agents & the corresponding observation
         """
-        if self.random_placement:
-            self.place_filters()
-            self.compute_reward_function()
-
-        # CONSTRUCT STATE - FULLY OBS & CONSTRUCT OBSERVATION - PARTIALLY OBS
-        self.current_state = {}
-        for agent_id in range(self.num_agents):
-            self.current_state[agent_id] = np.random.randint(0, self.grid_size, 2)
-
         self.current_obs = self.state_to_obs()
         return self.current_obs
 
     def state_to_obs(self):
+        obs = {}
+        # As in Pycolab feed different channels out!
+        for agent_id in range(self.num_agents):
+            obs[agent_id] = None
         return obs
 
     def step(self, action):
@@ -203,13 +250,42 @@ class MultiAgentGridworldEnv(gym.Env):
         reward = {i: 0 for i in range(self.num_agents)}
 
         # Loop over agents: Get specific rews - based on normalized activation
+        for agent_id in range(self.num_agents):
+            pass
         return reward, done
 
     def set_env_params(self, env_params=None, verbose=False):
         return
 
-    def render(self, mode='rgb_array', close=False):
-        """
-        Render the environment state
-        """
+    def render(self, axs):
+        base_idx = self.objects.index("#")
+        background_base = self.state[:, :, base_idx]
+        state_temp = self.state[:, :, :]
+
+        x, y = np.where(background_base == 0)
+        state_temp[x, y, 2] = 255
+        x, y = np.where(background_base == 1)
+        state_temp[x, y, 2] = 20/255
+
+        # Plot the base background
+        axs.imshow(self.state[:, :, 2])
+        axs.set_axis_off()
+
+        for i, obj in enumerate(self.objects):
+            if obj == "#":
+                pass
+            elif obj == "G":
+                x, y = np.where(self.state[:, :, i] == 1)
+                for j in range(len(x)):
+                    axs.text(y[j], x[j],
+                        "G",
+                        horizontalalignment="center",
+                        verticalalignment="center",
+                        bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
+                        fontsize=13)
+            else:
+                x, y = np.where(self.state[:, :, i] == 1)
+                for j in range(len(x)):
+                    circle = plt.Circle((y[j], x[j]), radius=0.25, color=COLOUR_FG[obj])
+                    axs.add_artist(circle)
         return
