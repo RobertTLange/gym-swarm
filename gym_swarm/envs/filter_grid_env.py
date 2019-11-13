@@ -106,12 +106,12 @@ class FilterGridworldEnv(gym.Env):
         """
         obs = {}
         for agent_id in range(self.num_agents):
-            x_start = max(0, int(self.current_state[agent_id][0]-(self.filter_size-1)/2))
-            x_stop = min(self.grid_size, int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1))
-            y_start = max(0, int(self.current_state[agent_id][1]-(self.filter_size-1)/2))
-            y_stop = min(self.grid_size, int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1))
+            y_start = max(0, int(self.current_state[agent_id][0]-(self.filter_size-1)/2))
+            y_stop = min(self.grid_size, int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1))
+            x_start = max(0, int(self.current_state[agent_id][1]-(self.filter_size-1)/2))
+            x_stop = min(self.grid_size, int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1))
 
-            obs_temp = self.state_grid[x_start:x_stop, y_start:y_stop]
+            obs_temp = self.state_grid[y_start:y_stop, x_start:x_stop]
 
             temp_rows_top = int(self.current_state[agent_id][0]-(self.filter_size-1)/2)
             if temp_rows_top < 0:
@@ -119,7 +119,7 @@ class FilterGridworldEnv(gym.Env):
                 obs_temp = np.concatenate((-1+ np.zeros((add_rows_top, obs_temp.shape[1])),
                                            obs_temp), axis=0)
 
-            temp_rows_bottom = int(self.current_state[agent_id][0]+(self.filter_size-1)/2)
+            temp_rows_bottom = int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1)
             if temp_rows_bottom > self.grid_size:
                 add_rows_bottom = temp_rows_bottom - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
@@ -137,7 +137,7 @@ class FilterGridworldEnv(gym.Env):
                 add_cols_right = temp_cols_right - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
                                            -1 + np.zeros((obs_temp.shape[0], add_cols_right))), axis=1)
-            # print(temp_rows_top, temp_rows_bottom, temp_cols_left, temp_cols_right)
+        
             obs[agent_id] = obs_temp
         return obs
 

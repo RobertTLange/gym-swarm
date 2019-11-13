@@ -160,10 +160,11 @@ class MultiAgentGridworldEnv(gym.Env):
         # SET INITIAL ENVIRONMENT PARAMETERS
         self.num_agents = 4                       # No. agents/kernels in env
         self.grid_size = (25, 35)                 # Size of 2d grid [0, 20]
-        self.obs_size = 5                         # Obssquare centered on agent
+        self.obs_size = 3                         # Obssquare centered on agent
         self.random_placement = random_placement  # Random placement at reset
         self.done = None
         self.sample_env = sample_env
+        self.final_goal_reward = 5
 
         if self.sample_env:
             maze_art = generate_base_art(self.grid_size[0], self.grid_size[1])
@@ -174,7 +175,8 @@ class MultiAgentGridworldEnv(gym.Env):
             game_art = default_maze[:]
 
         self.objects, self.state = art_to_array(game_art)
-
+        goal_index = self.objects.index("G")
+        self.goal_states = list(zip(*np.where(self.state[:, :, goal_index]==1)))
         # SET REWARD PARAMETERS
         self.wall_bump_reward = -0.05
 
@@ -194,10 +196,11 @@ class MultiAgentGridworldEnv(gym.Env):
         for agent_id in range(self.num_agents):
             agent_index = self.objects.index(str(agent_id))
             agent_state = np.where(self.state[:, :, agent_index]==1)
+            # TODO: Figure padding out
             y_start = int(agent_state[0]-(self.obs_size-1)/2)
-            y_stop = int(agent_state[0]+(self.obs_size-1)/2)
+            y_stop = int(agent_state[0]+(self.obs_size-1)/2) + 1
             x_start = int(agent_state[1]-(self.obs_size-1)/2)
-            x_stop = int(agent_state[1]+(self.obs_size-1)/2)
+            x_stop = int(agent_state[1]+(self.obs_size-1)/2) +1
             obs[agent_id] = self.state[y_start:y_stop, x_start:x_stop, :]
         return obs
 
@@ -252,7 +255,13 @@ class MultiAgentGridworldEnv(gym.Env):
 
         # Loop over agents: Get specific rews - based on normalized activation
         for agent_id in range(self.num_agents):
-            pass
+            reward[agent_id] += self.wall_bump_reward*wall_bump[agent_id]
+            agent_index = self.objects.index(str(agent_id))
+            agent_state = np.where(self.state[:, :, agent_index] == 1)
+            agent_state = [agent_state[0][0], agent_state[1][0]]
+            if tuple(agent_state) in self.goal_states:
+                reward[agent_id] += self.final_goal_reward
+                done = True
         return reward, done
 
     def set_env_params(self, env_params=None, verbose=False):
