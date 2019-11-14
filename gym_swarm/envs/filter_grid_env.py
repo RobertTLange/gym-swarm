@@ -26,6 +26,7 @@ class FilterGridworldEnv(gym.Env):
                           'obs_size': 5,
                           'random_placement': False,
                           'wall_bump_reward': -0.05}
+        self.action_space_size = 5
         self.set_env_params(default_params)
 
     def init_filters(self):
@@ -137,7 +138,7 @@ class FilterGridworldEnv(gym.Env):
                 add_cols_right = temp_cols_right - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
                                            -1 + np.zeros((obs_temp.shape[0], add_cols_right))), axis=1)
-        
+
             obs[agent_id] = obs_temp
         return obs
 
