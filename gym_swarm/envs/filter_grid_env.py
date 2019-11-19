@@ -107,33 +107,34 @@ class FilterGridworldEnv(gym.Env):
         """
         obs = {}
         for agent_id in range(self.num_agents):
-            y_start = max(0, int(self.current_state[agent_id][0]-(self.filter_size-1)/2))
-            y_stop = min(self.grid_size, int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1))
-            x_start = max(0, int(self.current_state[agent_id][1]-(self.filter_size-1)/2))
-            x_stop = min(self.grid_size, int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1))
+            # Get "valid" observation parts
+            y_start = max(0, int(self.current_state[agent_id][0]-(self.obs_size-1)/2))
+            y_stop = min(self.grid_size, int(self.current_state[agent_id][0]+(self.obs_size-1)/2 + 1))
+            x_start = max(0, int(self.current_state[agent_id][1]-(self.obs_size-1)/2))
+            x_stop = min(self.grid_size, int(self.current_state[agent_id][1]+(self.obs_size-1)/2 + 1))
 
             obs_temp = self.state_grid[y_start:y_stop, x_start:x_stop]
 
-            temp_rows_top = int(self.current_state[agent_id][0]-(self.filter_size-1)/2)
+            # Figure out how much to pad where
+            temp_rows_top = int(self.current_state[agent_id][0]-(self.obs_size-1)/2)
             if temp_rows_top < 0:
                 add_rows_top = -1*temp_rows_top
                 obs_temp = np.concatenate((-1+ np.zeros((add_rows_top, obs_temp.shape[1])),
                                            obs_temp), axis=0)
 
-            temp_rows_bottom = int(self.current_state[agent_id][0]+(self.filter_size-1)/2 + 1)
+            temp_rows_bottom = int(self.current_state[agent_id][0]+(self.obs_size-1)/2 + 1)
             if temp_rows_bottom > self.grid_size:
                 add_rows_bottom = temp_rows_bottom - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
                                            -1 + np.zeros((add_rows_bottom, obs_temp.shape[1]))), axis=0)
 
-            temp_cols_left = int(self.current_state[agent_id][1]-(self.filter_size-1)/2)
+            temp_cols_left = int(self.current_state[agent_id][1]-(self.obs_size-1)/2)
             if temp_cols_left < 0:
                 add_cols_left = -1*temp_cols_left
                 obs_temp = np.concatenate((-1 + np.zeros((obs_temp.shape[0], add_cols_left)),
                                            obs_temp), axis=1)
 
-            temp_cols_right = int(self.current_state[agent_id][1]+(self.filter_size-1)/2 + 1)
-
+            temp_cols_right = int(self.current_state[agent_id][1]+(self.obs_size-1)/2 + 1)
             if temp_cols_right > self.grid_size:
                 add_cols_right = temp_cols_right - self.grid_size
                 obs_temp = np.concatenate((obs_temp,
@@ -215,7 +216,6 @@ class FilterGridworldEnv(gym.Env):
         self.random_placement = env_params['random_placement']  # Random placement at reset
         self.wall_bump_reward = env_params['wall_bump_reward']  # Wall bump reward
 
-        self.done = None
         # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
         self.observation_space = spaces.Box(low=0, high=self.grid_size,
                                             shape=(self.num_agents, 2),
@@ -227,6 +227,10 @@ class FilterGridworldEnv(gym.Env):
         self.place_filters()
         self.compute_reward_function()
         self.sample_init_state()
+
+        if verbose:
+            print("Set environment parameters to:")
+            print(env_params)
         return
 
     def render(self, axs):

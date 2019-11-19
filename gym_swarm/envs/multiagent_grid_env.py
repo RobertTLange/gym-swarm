@@ -6,6 +6,7 @@ import os
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+from numba import jit
 
 
 def generate_base_art(x_dim, y_dim):
@@ -96,7 +97,7 @@ def art_to_array(game_art):
     y_dim = len(game_art[0])
     x_dim = len(game_art)
     state_array = np.zeros((x_dim, y_dim, len(objects)))
-    print
+    # print(objects)
     for row in range(state_array.shape[0]):
         for col in range(state_array.shape[1]):
             for i, obj in enumerate(objects):
@@ -115,40 +116,71 @@ COLOUR_FG = {' ': tuple([rgb_rescale(v) for v in (255, 255, 255)]),  # Backgroun
              '1': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
              '2': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
              '3': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
-             '4': tuple([rgb_rescale(v) for v in   (214, 182, 79)]),   # Players
+             '4': tuple([rgb_rescale(v) for v in   (214, 182, 79)]),
              '5': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
              '6': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
              '7': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
              '8': tuple([rgb_rescale(v) for v in  (214, 182, 79)]),
-             'G': tuple([rgb_rescale(v) for v in (0, 100, 0)])         # Goal State
+             'G': tuple([rgb_rescale(v) for v in (0, 100, 0)]),       # Goal State
+             'S': tuple([rgb_rescale(v) for v in (100, 100, 100)])    # Subgoal State
              }
+
 
 # 25x35x6 Base Maze Gridworld for the Fish Environment
 default_maze = ["###################################",
                 "#01         #                     #",
-                "#23         #                     #",
+                "#23         #            S        #",
                 "#           #                     #",
                 "#       #####   #############     #",
-                "#               #           #     #",
+                "#             S #           #     #",
+                "#####           #    S      #     #",
                 "#####           #           #     #",
-                "#####           #           #     #",
-                "#####   #########    ####         #",
+                "#####   #########    ####      S  #",
                 "#####   #            #            #",
-                "#####   #            #            #",
+                "#####   #    S       #            #",
                 "#########            #            #",
                 "#####       #####    ##########   #",
                 "#####       #        #        #   #",
-                "#####       #        #        #   #",
+                "#####       #        #   S    #   #",
                 "#####       #        #        #   #",
                 "#####    #############   #    #####",
                 "#####                    #        #",
-                "#####                    #        #",
+                "#####  S                 #        #",
                 "#####                    #        #",
                 "#####    #####################    #",
                 "#####                    #        #",
                 "#####                    #      GG#",
                 "#####                    #      GG#",
                 "###################################"]
+
+# @jit(nopython=False)
+def jit_step(action, state, num_agents, objects, wall_states):
+    wall_bump = np.zeros(num_agents)
+    next_state = state.copy()
+    for agent_id, agent_action in action.items():
+        # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
+        agent_index = objects.index(str(agent_id))
+        agent_state_old = np.where(state[:, :, agent_index] == 1)
+        agent_state_new = [agent_state_old[0][0], agent_state_old[1][0]]
+        if agent_action == 0:   # Right Action Execution
+            agent_state_new[1] = agent_state_old[1][0] + 1
+        elif agent_action == 1: # Left Action Execution
+            agent_state_new[1] = agent_state_old[1][0] - 1
+        elif agent_action == 2: # Down Action Execution
+            agent_state_new[0] = agent_state_old[0][0] - 1
+        elif agent_action == 3: # Up Action Execution
+            agent_state_new[0] = agent_state_old[0][0] + 1
+
+        if tuple(agent_state_new) in wall_states:
+            # Agent bumped into wall - revert and track index!
+            wall_bump[agent_id] = 1
+        else:
+            # Otherwise perform the state transition
+            next_state[agent_state_old[0][0], agent_state_old[1][0], agent_index] = 0
+            next_state[agent_state_new[0], agent_state_new[1], agent_index] = 1
+    return next_state, wall_bump
+
+
 
 class MultiAgentGridworldEnv(gym.Env):
     """
@@ -164,29 +196,43 @@ class MultiAgentGridworldEnv(gym.Env):
         self.random_placement = random_placement  # Random placement at reset
         self.done = None
         self.sample_env = sample_env
-        self.final_goal_reward = 5
 
         if self.sample_env:
             maze_art = generate_base_art(self.grid_size[0], self.grid_size[1])
             maze_w_walls = sample_walls(maze_art, max_wall_len=5, num_walls=5)
-            game_art = sample_players_initial_state(maze_w_walls,
-                                                    num_agents=self.num_agents)
+            self.game_art = sample_players_initial_state(maze_w_walls,
+                                                         num_agents=self.num_agents)
         else:
-            game_art = default_maze[:]
+            self.game_art = default_maze[:]
 
-        self.objects, self.state = art_to_array(game_art)
-        goal_index = self.objects.index("G")
-        self.goal_states = list(zip(*np.where(self.state[:, :, goal_index]==1)))
+        # Convert Art into State Array & Location Indices
+        self.objects, self.state = art_to_array(self.game_art)
+        self.num_objects = self.state.shape[2]
+        self.wall_index = self.objects.index("#")
+        self.goal_index = self.objects.index("G")
+        self.subgoal_index = self.objects.index("S")
+        self.wall_states = list(zip(*np.where(self.state[:, :, self.wall_index]==1)))
+        self.goal_states = list(zip(*np.where(self.state[:, :, self.goal_index]==1)))
+        self.subgoal_states = list(zip(*np.where(self.state[:, :, self.subgoal_index]==1)))
+
         # SET REWARD PARAMETERS
         self.wall_bump_reward = -0.05
+        self.subgoal_reward = 1
+        self.final_goal_reward = 10
 
         # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
-        self.action_space = spaces.Discrete(5)
+        self.action_space_size = 5
 
     def reset(self):
         """
         Sample initial placement of agents & the corresponding observation
+        - Reset the goal locations!
         """
+        self.objects, self.state = art_to_array(self.game_art)
+        self.goal_index = self.objects.index("G")
+        self.goal_states = list(zip(*np.where(self.state[:, :, self.goal_index]==1)))
+        self.subgoal_index = self.objects.index("S")
+        self.subgoal_states = list(zip(*np.where(self.state[:, :, self.subgoal_index]==1)))
         self.current_obs = self.state_to_obs()
         return self.current_obs
 
@@ -196,12 +242,48 @@ class MultiAgentGridworldEnv(gym.Env):
         for agent_id in range(self.num_agents):
             agent_index = self.objects.index(str(agent_id))
             agent_state = np.where(self.state[:, :, agent_index]==1)
-            # TODO: Figure padding out
-            y_start = int(agent_state[0]-(self.obs_size-1)/2)
-            y_stop = int(agent_state[0]+(self.obs_size-1)/2) + 1
-            x_start = int(agent_state[1]-(self.obs_size-1)/2)
-            x_stop = int(agent_state[1]+(self.obs_size-1)/2) +1
-            obs[agent_id] = self.state[y_start:y_stop, x_start:x_stop, :]
+            # Get "valid" observation parts
+            y_start = max(0, int(agent_state[0]-(self.obs_size-1)/2))
+            y_stop = min(self.grid_size[0], int(agent_state[0]+(self.obs_size-1)/2 + 1))
+            x_start = max(0, int(agent_state[1]-(self.obs_size-1)/2))
+            x_stop = min(self.grid_size[1], int(agent_state[1]+(self.obs_size-1)/2 + 1))
+
+            obs_temp = self.state[y_start:y_stop, x_start:x_stop, :]
+
+            # Figure out how much to pad where
+            temp_rows_top = int(agent_state[0]-(self.obs_size-1)/2)
+            if temp_rows_top < 0:
+                add_rows_top = -1*temp_rows_top
+                top_rows = np.zeros((add_rows_top, obs_temp.shape[1], self.num_objects))
+                # Make wall dimension respect "end" of env
+                top_rows[:, :, self.wall_index] = 1
+                obs_temp = np.concatenate((top_rows, obs_temp), axis=0)
+
+            temp_rows_bottom = int(agent_state[0]+(self.obs_size-1)/2 + 1)
+            if temp_rows_bottom > self.grid_size[0]:
+                add_rows_bottom = temp_rows_bottom - self.grid_size[0]
+                bottom_rows = np.zeros((add_rows_bottom, obs_temp.shape[1], self.num_objects))
+                # Make wall dimension respect "end" of env
+                bottom_rows[:, :, self.wall_index] = 1
+                obs_temp = np.concatenate((obs_temp, bottom_rows), axis=0)
+
+            temp_cols_left = int(agent_state[1]-(self.obs_size-1)/2)
+            if temp_cols_left < 0:
+                add_cols_left = -1*temp_cols_left
+                cols_left = np.zeros((obs_temp.shape[0], add_cols_left, self.num_objects))
+                # Make wall dimension respect "end" of env
+                cols_left[:, :, self.wall_index] = 1
+                obs_temp = np.concatenate((cols_left, obs_temp), axis=1)
+
+            temp_cols_right = int(agent_state[1]+(self.obs_size-1)/2 + 1)
+            if temp_cols_right > self.grid_size[1]:
+                add_cols_right = temp_cols_right - self.grid_size[1]
+                cols_right = np.zeros((obs_temp.shape[0], add_cols_right, self.num_objects))
+                # Make wall dimension respect "end" of env
+                cols_right[:, :, self.wall_index] = 1
+                obs_temp = np.concatenate((obs_temp, cols_right), axis=1)
+
+            obs[agent_id] = obs_temp
         return obs
 
     def step(self, action):
@@ -212,32 +294,8 @@ class MultiAgentGridworldEnv(gym.Env):
             raise RuntimeError("Episode has finished. Call env.reset() to start a new episode.")
 
         # Update state of env and obs distributed to agents
-        wall_bump = {i: 0 for i in range(self.num_agents)}
-        wall_index = self.objects.index("#")
-        wall_states = list(zip(*np.where(self.state[:, :, wall_index]==1)))
-        next_state = {}
-        for agent_id, agent_action in action.items():
-            # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
-            agent_index = self.objects.index(str(agent_id))
-            agent_state_old = np.where(self.state[:, :, agent_index] == 1)
-            agent_state_new = [agent_state_old[0][0], agent_state_old[1][0]]
-            if agent_action == 0:   # Right Action Execution
-                agent_state_new[1] = agent_state_old[1][0] + 1
-            elif agent_action == 1: # Left Action Execution
-                agent_state_new[1] = agent_state_old[1][0] - 1
-            elif agent_action == 2: # Down Action Execution
-                agent_state_new[0] = agent_state_old[0][0] - 1
-            elif agent_action == 3: # Up Action Execution
-                agent_state_new[0] = agent_state_old[0][0] + 1
-
-            if tuple(agent_state_new) in wall_states:
-                # Agent bumped into wall - revert and track index!
-                agent_state_new = agent_state_old
-                wall_bump[agent_id] = 1
-            else:
-                # Otherwise perform the state transition
-                self.state[agent_state_old[0], agent_state_old[1], agent_index] = 0
-                self.state[agent_state_new[0], agent_state_new[1], agent_index] = 1
+        self.state, wall_bump = jit_step(action, self.state, self.num_agents,
+                                         self.objects, self.wall_states)
 
         self.current_obs = self.state_to_obs()
         # Calculate the reward based on the transition and return meta info
@@ -259,12 +317,29 @@ class MultiAgentGridworldEnv(gym.Env):
             agent_index = self.objects.index(str(agent_id))
             agent_state = np.where(self.state[:, :, agent_index] == 1)
             agent_state = [agent_state[0][0], agent_state[1][0]]
-            if tuple(agent_state) in self.goal_states:
+            if tuple(agent_state) in self.subgoal_states:
+                # Delete Subgoal from list of subgoal states
+                self.state[agent_state[0][0], agent_state[1][0], self.subgoal_index] = 0
+                self.subgoal_states.remove(tuple(agent_state))
+                reward[agent_id] += self.subgoal_reward
+            elif tuple(agent_state) in self.goal_states:
+                # Final goal state is reached by an agent - terminate
                 reward[agent_id] += self.final_goal_reward
                 done = True
         return reward, done
 
     def set_env_params(self, env_params=None, verbose=False):
+        # SET INITIAL ENVIRONMENT PARAMETERS
+        self.num_agents = env_params['num_agents']                # No. agents/kernels in env
+        self.obs_size = env_params['obs_size']                    # Obssquare centered on agent
+        self.wall_bump_reward = env_params['wall_bump_reward']    # Wall bump reward
+        self.subgoal_reward = env_params['subgoal_reward']        # Subgoal bump reward
+        self.final_goal_reward = env_params['final_goal_reward']  # Final goal bump reward
+
+        if verbose:
+            print("Set environment parameters to:")
+            print(env_params)
+            print("Call env.reset() to create env with new parameters")
         return
 
     def render(self, axs):
@@ -293,9 +368,64 @@ class MultiAgentGridworldEnv(gym.Env):
                         verticalalignment="center",
                         bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
                         fontsize=13)
+            elif obj == "S":
+                x, y = np.where(self.state[:, :, i] == 1)
+                for j in range(len(x)):
+                    axs.text(y[j], x[j],
+                        "S",
+                        horizontalalignment="center",
+                        verticalalignment="center",
+                        bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
+                        fontsize=13)
             else:
                 x, y = np.where(self.state[:, :, i] == 1)
                 for j in range(len(x)):
                     circle = plt.Circle((y[j], x[j]), radius=0.25, color=COLOUR_FG[obj])
                     axs.add_artist(circle)
+        return
+
+    def render_obs(self, axs):
+        obs = self.state_to_obs()
+
+        for agent_id in range(self.num_agents):
+            base_idx = self.objects.index("#")
+            background_base = obs[agent_id][:, :, base_idx]
+            obs_temp = obs[agent_id].copy()[:, :, :]
+
+            x, y = np.where(background_base == 0)
+            obs_temp[x, y, base_idx] = 255
+            x, y = np.where(background_base == 1)
+            obs_temp[x, y, base_idx] = 20/255
+
+            # Plot the base background
+            axs[agent_id].imshow(obs_temp[:, :, base_idx])
+            axs[agent_id].set_axis_off()
+            axs[agent_id].set_title("Agent: {}".format(agent_id + 1))
+
+            for i, obj in enumerate(self.objects):
+                if obj == "#":
+                    continue
+                elif obj == "G":
+                    x, y = np.where(obs_temp[:, :, i] == 1)
+                    for j in range(len(x)):
+                        axs[agent_id].text(y[j], x[j],
+                            "G",
+                            horizontalalignment="center",
+                            verticalalignment="center",
+                            bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
+                            fontsize=13)
+                elif obj == "S":
+                    x, y = np.where(obs_temp[:, :, i] == 1)
+                    for j in range(len(x)):
+                        axs[agent_id].text(y[j], x[j],
+                            "S",
+                            horizontalalignment="center",
+                            verticalalignment="center",
+                            bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
+                            fontsize=13)
+                else:
+                    x, y = np.where(obs_temp[:, :, i] == 1)
+                    for j in range(len(x)):
+                        circle = plt.Circle((y[j], x[j]), radius=0.25, color=COLOUR_FG[obj])
+                        axs[agent_id].add_artist(circle)
         return
