@@ -25,7 +25,8 @@ class FilterGridworldEnv(gym.Env):
                           'filter_size': 3,
                           'obs_size': 5,
                           'random_placement': False,
-                          'wall_bump_reward': -0.05}
+                          'wall_bump_reward': -0.05,
+                          'step_reward': -0.01}
         self.action_space_size = 5
         self.set_env_params(default_params)
 
@@ -54,8 +55,8 @@ class FilterGridworldEnv(gym.Env):
         self.optimal_locations = {}
         for agent_id in range(self.num_agents):
             self.state_grid[coords[agent_id][0]:coords[agent_id][0]+self.filter_size, coords[agent_id][1]:coords[agent_id][1]+self.filter_size] = self.reward_filters[agent_id]
-            self.optimal_locations[agent_id] = [coords[agent_id][0] + (self.filter_size/2)-1,
-                                                coords[agent_id][1] + (self.filter_size/2)-1]
+            self.optimal_locations[agent_id] = [int(coords[agent_id][0] + (self.filter_size-1)/2),
+                                                int(coords[agent_id][1] + (self.filter_size-1)/2)]
 
     def compute_reward_function(self):
         # Compute padded version of gridworld to convolute over it
@@ -83,6 +84,9 @@ class FilterGridworldEnv(gym.Env):
             self.compute_reward_function()
             self.sample_init_state()
 
+        # Reset "accomlishments" of the agents
+        self.done = False
+        self.visit_optimal_loc = {agent_id: 0 for agent_id in range(self.num_agents)}
         self.current_obs = self.state_to_obs()
         return self.current_obs
 
@@ -194,16 +198,16 @@ class FilterGridworldEnv(gym.Env):
         reward = {i: 0 for i in range(self.num_agents)}
 
         # Loop over agents: Get specific rews - based on normalized activation
-        no_agent_at_optimal_position = 0
         for agent_id in range(self.num_agents):
             reward[agent_id] += self.reward_function[agent_id][self.current_state[agent_id][0], self.current_state[agent_id][1]]
             reward[agent_id] += self.wall_bump_reward*wall_bump[agent_id]
+            reward[agent_id] += self.step_reward
 
             if (self.current_state[agent_id] == self.optimal_locations[agent_id]).all():
-                no_agent_at_optimal_position += 1
+                self.visit_optimal_loc[agent_id] = 1
 
         # Terminate the episode if all agents are at their optimal positions
-        if no_agent_at_optimal_position == self.num_agents:
+        if sum(self.visit_optimal_loc.values()) == self.num_agents:
             done = True
         return reward, done
 
@@ -215,6 +219,7 @@ class FilterGridworldEnv(gym.Env):
         self.obs_size = env_params['obs_size']                  # Obssquare centered on agent
         self.random_placement = env_params['random_placement']  # Random placement at reset
         self.wall_bump_reward = env_params['wall_bump_reward']  # Wall bump reward
+        self.step_reward = env_params['step_reward']            # Step reward
 
         # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
         self.observation_space = spaces.Box(low=0, high=self.grid_size,
@@ -254,6 +259,11 @@ class FilterGridworldEnv(gym.Env):
             temp_state = (self.current_state[agent_id][1]+1, self.current_state[agent_id][0]+1)
             circle = plt.Circle(temp_state, radius=0.25, color="blue")
             axs.add_artist(circle)
+            axs.text(temp_state[0], temp_state[1],
+                str(agent_id+1),
+                horizontalalignment="right",
+                verticalalignment="top",
+                fontsize=11)
         axs.set_title("Environment State")
         axs.set_axis_off()
         return
@@ -265,6 +275,14 @@ class FilterGridworldEnv(gym.Env):
             axs[agent_id].set_title('Rewards Agent ' + str(agent_id + 1))
             axs[agent_id].set_axis_off()
 
+    def render_obs(self, axs):
+        obs = self.state_to_obs()
+
+        for agent_id in range(self.num_agents):
+            obs_to_plot = obs[agent_id]
+            axs[agent_id].imshow(-1*obs_to_plot, cmap="Greys", vmin=-1, vmax=1)
+            axs[agent_id].set_axis_off()
+            axs[agent_id].set_title("Agent: {}".format(agent_id + 1))
 
 def zero_pad(array, ref_shape, offsets):
     """

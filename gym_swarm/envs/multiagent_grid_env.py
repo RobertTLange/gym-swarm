@@ -319,7 +319,7 @@ class MultiAgentGridworldEnv(gym.Env):
             agent_state = [agent_state[0][0], agent_state[1][0]]
             if tuple(agent_state) in self.subgoal_states:
                 # Delete Subgoal from list of subgoal states
-                self.state[agent_state[0][0], agent_state[1][0], self.subgoal_index] = 0
+                self.state[agent_state[0], agent_state[1], self.subgoal_index] = 0
                 self.subgoal_states.remove(tuple(agent_state))
                 reward[agent_id] += self.subgoal_reward
             elif tuple(agent_state) in self.goal_states:
