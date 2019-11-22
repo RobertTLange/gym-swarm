@@ -5,6 +5,7 @@ from gym.utils import seeding
 import os
 import pprint
 import math
+import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -91,6 +92,18 @@ def sample_players_initial_state(current_art, num_agents=2):
     return maze_w_players
 
 
+def set_agents_corner(current_art, num_agents):
+    """
+    Place a set of agents into the corner of the environment
+    """
+    maze_w_players = current_art[:]
+    locations = list(itertools.product(range(1, 4),repeat= 2))
+    for agent_id in range(num_agents):
+        row, col = locations[agent_id]
+        maze_w_players[row] = maze_w_players[row][:col] + str(agent_id) + maze_w_players[row][col+1:]
+    return maze_w_players
+
+
 def art_to_array(game_art):
     # Create a state array on which to act on!
     all_elements = set()
@@ -134,8 +147,8 @@ COLOUR_FG = {' ': tuple([rgb_rescale(v) for v in (255, 255, 255)]),  # Backgroun
 
 # 25x35x6 Base Maze Gridworld for the Fish Environment
 default_maze = ["###################################",
-                "#01         #                     #",
-                "#23         #    S       S        #",
+                "#           #                     #",
+                "#           #    S       S        #",
                 "#           #                  S  #",
                 "#  S    #####   #############     #",
                 "#       S     S #           #     #",
@@ -210,7 +223,7 @@ class MultiAgentGridworldEnv(gym.Env):
             self.game_art = sample_players_initial_state(maze_w_walls,
                                                          num_agents=self.num_agents)
         else:
-            self.game_art = default_maze[:]
+            self.game_art = set_agents_corner(default_maze, self.num_agents)
 
         # Convert Art into State Array & Location Indices
         self.objects, self.state = art_to_array(self.game_art)
@@ -236,10 +249,14 @@ class MultiAgentGridworldEnv(gym.Env):
         - Reset the goal locations!
         """
         self.done = False
+        self.game_art = set_agents_corner(default_maze, self.num_agents)
         self.objects, self.state = art_to_array(self.game_art)
+        self.num_objects = self.state.shape[2]
+        self.wall_index = self.objects.index("#")
         self.goal_index = self.objects.index("G")
-        self.goal_states = list(zip(*np.where(self.state[:, :, self.goal_index]==1)))
         self.subgoal_index = self.objects.index("S")
+
+        self.goal_states = list(zip(*np.where(self.state[:, :, self.goal_index]==1)))
         self.subgoal_states = list(zip(*np.where(self.state[:, :, self.subgoal_index]==1)))
         self.current_obs = self.state_to_obs()
         return self.current_obs
@@ -257,7 +274,6 @@ class MultiAgentGridworldEnv(gym.Env):
             x_stop = min(self.grid_size[1], int(agent_state[1]+(self.obs_size-1)/2 + 1))
 
             obs_temp = self.state[y_start:y_stop, x_start:x_stop, :]
-
             # Figure out how much to pad where
             temp_rows_top = int(agent_state[0]-(self.obs_size-1)/2)
             if temp_rows_top < 0:
