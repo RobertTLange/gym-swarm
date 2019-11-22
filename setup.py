@@ -12,5 +12,6 @@ setup(name='gym_swarm',
       long_description=long_description,
       long_description_content_type="text/markdown",
       url="https://github.com/RobertTLange/gym-swarm",
-      install_requires=['numpy', 'scipy', 'sklearn', 'gym', 'matplotlib', 'numba']
+      install_requires=['numpy', 'scipy', 'sklearn', 'gym', 'matplotlib',
+                        'seaborn', 'numba']
       )

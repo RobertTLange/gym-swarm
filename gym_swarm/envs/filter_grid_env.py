@@ -6,6 +6,10 @@ import os
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set(context='poster', style='white', palette='Paired',
+        font='sans-serif', font_scale=1, color_codes=True, rc=None)
+COLOURS = sns.color_palette("Set1")
 
 
 class FilterGridworldEnv(gym.Env):
@@ -283,6 +287,34 @@ class FilterGridworldEnv(gym.Env):
             axs[agent_id].imshow(-1*obs_to_plot, cmap="Greys", vmin=-1, vmax=1)
             axs[agent_id].set_axis_off()
             axs[agent_id].set_title("Agent: {}".format(agent_id + 1))
+
+    def render_trace(self, agent_locs):
+        fig, axs = plt.subplots(1, 1, figsize=(12, 8))
+        # Get the basic environment layout
+        plot_grid = self.state_grid.copy()
+        # Plot agent filters in their location
+        for agent_id in range(self.num_agents):
+            x_start = max(0, int(agent_locs[-1][agent_id][0]-(self.filter_size-1)/2))
+            x_stop = min(self.grid_size, int(agent_locs[-1][agent_id][0]+(self.filter_size-1)/2 + 1))
+            y_start = max(0, int(agent_locs[-1][agent_id][1]-(self.filter_size-1)/2))
+            y_stop = min(self.grid_size, int(agent_locs[-1][agent_id][1]+(self.filter_size-1)/2 + 1))
+            plot_grid[x_start : x_stop, y_start : y_stop] = self.reward_filters[agent_id][0 : (x_stop - x_start), 0 : (y_stop - y_start)]/2
+
+        axs.imshow(frame_image(plot_grid, 1), cmap="Greys")
+
+        # Put blue circle at center of state of agent
+        for t in reversed(range(len(agent_locs))):
+            for agent_id in range(self.num_agents):
+                temp_state = (agent_locs[t][agent_id][1]+1, agent_locs[t][agent_id][0]+1)
+                circle = plt.Circle(temp_state, radius=0.25, color=COLOURS[agent_id],
+                                    alpha=(t+1)/len(agent_locs))
+                axs.add_artist(circle)
+            axs.set_title("Environment State")
+            axs.set_axis_off()
+        return fig, axs
+
+    def get_agent_locs(self):
+        return self.current_state.copy()
 
 def zero_pad(array, ref_shape, offsets):
     """

@@ -6,6 +6,11 @@ import os
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set(context='poster', style='white', palette='Paired',
+        font='sans-serif', font_scale=1, color_codes=True, rc=None)
+COLOURS = sns.color_palette("Set1")
+
 from numba import jit
 
 
@@ -129,24 +134,24 @@ COLOUR_FG = {' ': tuple([rgb_rescale(v) for v in (255, 255, 255)]),  # Backgroun
 # 25x35x6 Base Maze Gridworld for the Fish Environment
 default_maze = ["###################################",
                 "#01         #                     #",
-                "#23         #            S        #",
-                "#           #                     #",
-                "#       #####   #############     #",
-                "#             S #           #     #",
+                "#23         #    S       S        #",
+                "#           #                  S  #",
+                "#  S    #####   #############     #",
+                "#       S     S #           #     #",
                 "#####           #    S      #     #",
-                "#####           #           #     #",
-                "#####   #########    ####      S  #",
+                "#####           #         S #     #",
+                "#####   #########  S ####      S  #",
                 "#####   #            #            #",
-                "#####   #    S       #            #",
+                "#####   #    S   S   #            #",
                 "#########            #            #",
                 "#####       #####    ##########   #",
-                "#####       #        #        #   #",
+                "#####  S    #        #        #   #",
                 "#####       #        #   S    #   #",
                 "#####       #        #        #   #",
                 "#####    #############   #    #####",
                 "#####                    #        #",
-                "#####  S                 #        #",
-                "#####                    #        #",
+                "#####  S       S       S #   S    #",
+                "#####                    #      S #",
                 "#####    #####################    #",
                 "#####                    #        #",
                 "#####                    #      GG#",
@@ -170,9 +175,10 @@ def jit_step(action, state, num_agents, objects, wall_states):
             agent_state_new[0] = agent_state_old[0][0] - 1
         elif agent_action == 3: # Up Action Execution
             agent_state_new[0] = agent_state_old[0][0] + 1
+        # If agent_action is 4 don't do anything
 
         if tuple(agent_state_new) in wall_states:
-            # Agent bumped into wall - revert and track index!
+            # Agent bumped into wall - revert/dont update & track index/bump!
             wall_bump[agent_id] = 1
         else:
             # Otherwise perform the state transition
@@ -228,6 +234,7 @@ class MultiAgentGridworldEnv(gym.Env):
         Sample initial placement of agents & the corresponding observation
         - Reset the goal locations!
         """
+        self.done = False
         self.objects, self.state = art_to_array(self.game_art)
         self.goal_index = self.objects.index("G")
         self.goal_states = list(zip(*np.where(self.state[:, :, self.goal_index]==1)))
@@ -313,7 +320,6 @@ class MultiAgentGridworldEnv(gym.Env):
 
         # Loop over agents: Get specific rews - based on normalized activation
         for agent_id in range(self.num_agents):
-            reward[agent_id] += self.wall_bump_reward*wall_bump[agent_id]
             agent_index = self.objects.index(str(agent_id))
             agent_state = np.where(self.state[:, :, agent_index] == 1)
             agent_state = [agent_state[0][0], agent_state[1][0]]
@@ -326,6 +332,8 @@ class MultiAgentGridworldEnv(gym.Env):
                 # Final goal state is reached by an agent - terminate
                 reward[agent_id] += self.final_goal_reward
                 done = True
+            else:
+                reward[agent_id] += self.wall_bump_reward*wall_bump[agent_id]
         return reward, done
 
     def set_env_params(self, env_params=None, verbose=False):
@@ -343,9 +351,13 @@ class MultiAgentGridworldEnv(gym.Env):
         return
 
     def render(self, axs):
+        """
+        Function renders the current state of the environment
+        """
+        # Plot the base environment
         base_idx = self.objects.index("#")
-        background_base = self.state[:, :, base_idx]
         state_temp = self.state.copy()[:, :, :]
+        background_base = state_temp[:, :, base_idx]
 
         x, y = np.where(background_base == 0)
         state_temp[x, y, base_idx] = 255
@@ -385,6 +397,9 @@ class MultiAgentGridworldEnv(gym.Env):
         return
 
     def render_obs(self, axs):
+        """
+        Function renders the partially observed state of the agents
+        """
         obs = self.state_to_obs()
 
         for agent_id in range(self.num_agents):
@@ -429,3 +444,57 @@ class MultiAgentGridworldEnv(gym.Env):
                         circle = plt.Circle((y[j], x[j]), radius=0.25, color=COLOUR_FG[obj])
                         axs[agent_id].add_artist(circle)
         return
+
+    def render_trace(self, agent_locs):
+        # Plot the base environment
+        fig, axs = plt.subplots(1, 1, figsize=(12, 8))
+        base_idx = self.objects.index("#")
+        state_temp = self.state.copy()[:, :, :]
+        background_base = state_temp[:, :, base_idx]
+
+        x, y = np.where(background_base == 0)
+        state_temp[x, y, base_idx] = 255
+        x, y = np.where(background_base == 1)
+        state_temp[x, y, base_idx] = 20/255
+
+        # Plot the base background
+        axs.imshow(state_temp[:, :, base_idx])
+        axs.set_axis_off()
+
+        for i, obj in enumerate(self.objects):
+            if obj == "#":
+                pass
+            elif obj == "G":
+                x, y = np.where(self.state[:, :, i] == 1)
+                for j in range(len(x)):
+                    axs.text(y[j], x[j],
+                        "G",
+                        horizontalalignment="center",
+                        verticalalignment="center",
+                        bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
+                        fontsize=13)
+            elif obj == "S":
+                x, y = np.where(self.state[:, :, i] == 1)
+                for j in range(len(x)):
+                    axs.text(y[j], x[j],
+                        "S",
+                        horizontalalignment="center",
+                        verticalalignment="center",
+                        bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
+                        fontsize=13)
+
+        for t in reversed(range(len(agent_locs))):
+            for agent_id in range(len(agent_locs[0])):
+                x, y = agent_locs[t][agent_id][0], agent_locs[t][agent_id][1]
+                circle = plt.Circle((y, x), radius=0.25, color=COLOURS[agent_id],
+                                    alpha=(t+1)/len(agent_locs))
+                axs.add_artist(circle)
+        return fig, axs
+
+    def get_agent_locs(self):
+        state_storage = []
+        for i, obj in enumerate(self.objects):
+            if obj not in ["#", "G", "S"]:
+                x, y = np.where(self.state[:, :, i] == 1)
+                state_storage.append((x, y))
+        return state_storage
