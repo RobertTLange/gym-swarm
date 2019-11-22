@@ -3,6 +3,7 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 
 import os
+import pprint
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,7 +31,9 @@ class FilterGridworldEnv(gym.Env):
                           'obs_size': 5,
                           'random_placement': False,
                           'wall_bump_reward': -0.05,
-                          'step_reward': -0.01}
+                          'step_reward': -0.01,
+                          'sparse_reward': 0,
+                          'random_seed': 1}
         self.action_space_size = 5
         self.set_env_params(default_params)
 
@@ -72,21 +75,32 @@ class FilterGridworldEnv(gym.Env):
         for agent_id in range(self.num_agents):
             activation_grid = np.zeros((self.grid_size, self.grid_size))
             # Compute the convolution
-            for i in range(self.grid_size):
-                for j in range(self.grid_size):
-                    activation_grid[i, j] = np.multiply(padded_grid[i:i+self.filter_size,
-                                                                    j:j+self.filter_size],
-                                                        self.reward_filters[agent_id]).sum()
+            if not self.sparse_reward:
+                for i in range(self.grid_size):
+                    for j in range(self.grid_size):
+                        activation_grid[i, j] = np.multiply(padded_grid[i:i+self.filter_size,
+                                                                        j:j+self.filter_size],
+                                                            self.reward_filters[agent_id]).sum()
+            else:
+                # Sparse Env Configuration of Reward Function
+                x_start = self.optimal_locations[agent_id][0] - int((self.filter_size-1)/2)
+                x_stop = self.optimal_locations[agent_id][0] + int((self.filter_size-1)/2) + 1
+                y_start = self.optimal_locations[agent_id][1] - int((self.filter_size-1)/2)
+                y_stop = self.optimal_locations[agent_id][1] + int((self.filter_size-1)/2) + 1
+                activation_grid[self.optimal_locations[agent_id][0], self.optimal_locations[agent_id][1]] = np.multiply(padded_grid[x_start:x_stop,
+                                                                                          y_start:y_stop],
+                                                                              self.reward_filters[agent_id]).sum()
             self.reward_function[agent_id] = activation_grid
 
     def reset(self):
         """
         Sample initial placement of agents & the corresponding observation
         """
-        if self.random_placement:
-            self.place_filters()
-            self.compute_reward_function()
-            self.sample_init_state()
+        if not self.random_placement:
+            np.random.seed(self.random_seed)
+        self.place_filters()
+        self.compute_reward_function()
+        self.sample_init_state()
 
         # Reset "accomlishments" of the agents
         self.done = False
@@ -222,8 +236,10 @@ class FilterGridworldEnv(gym.Env):
         self.filter_size = env_params['filter_size']            # Assert that uneven
         self.obs_size = env_params['obs_size']                  # Obssquare centered on agent
         self.random_placement = env_params['random_placement']  # Random placement at reset
+        self.random_seed = env_params['random_seed']            # Seed for filter init/place
         self.wall_bump_reward = env_params['wall_bump_reward']  # Wall bump reward
         self.step_reward = env_params['step_reward']            # Step reward
+        self.sparse_reward = env_params['sparse_reward']        # Sparse reward
 
         # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
         self.observation_space = spaces.Box(low=0, high=self.grid_size,
@@ -231,15 +247,11 @@ class FilterGridworldEnv(gym.Env):
                                             dtype=np.int)
         self.action_space = spaces.Discrete(5)
 
-        # PLACE FILTERS IN THE ENVIRONMENT & COMPUTE AGENT-SPECIFIC REWARD FCT
         self.init_filters()
-        self.place_filters()
-        self.compute_reward_function()
-        self.sample_init_state()
 
         if verbose:
             print("Set environment parameters to:")
-            print(env_params)
+            pprint.pprint(env_params)
         return
 
     def render(self, axs):
@@ -309,7 +321,6 @@ class FilterGridworldEnv(gym.Env):
                 circle = plt.Circle(temp_state, radius=0.25, color=COLOURS[agent_id],
                                     alpha=(t+1)/len(agent_locs))
                 axs.add_artist(circle)
-            axs.set_title("Environment State")
             axs.set_axis_off()
         return fig, axs
 

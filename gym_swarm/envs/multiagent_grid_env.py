@@ -3,6 +3,7 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 
 import os
+import pprint
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -346,7 +347,7 @@ class MultiAgentGridworldEnv(gym.Env):
 
         if verbose:
             print("Set environment parameters to:")
-            print(env_params)
+            pprint.pprint(env_params)
             print("Call env.reset() to create env with new parameters")
         return
 
