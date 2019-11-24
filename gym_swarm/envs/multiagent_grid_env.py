@@ -115,13 +115,13 @@ def art_to_array(game_art):
 
     y_dim = len(game_art[0])
     x_dim = len(game_art)
-    state_array = np.zeros((x_dim, y_dim, len(objects)))
-    # print(objects)
-    for row in range(state_array.shape[0]):
-        for col in range(state_array.shape[1]):
+    state_array = np.zeros((len(objects), x_dim, y_dim))
+
+    for row in range(state_array.shape[1]):
+        for col in range(state_array.shape[2]):
             for i, obj in enumerate(objects):
                 if game_art[row][col] == obj:
-                    state_array[row, col, i] = 1
+                    state_array[i, row, col] = 1
     return objects, state_array
 
 
@@ -179,7 +179,7 @@ def jit_step(action, state, num_agents, objects, wall_states):
     for agent_id, agent_action in action.items():
         # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
         agent_index = objects.index(str(agent_id))
-        agent_state_old = np.where(state[:, :, agent_index] == 1)
+        agent_state_old = np.where(state[agent_index, :, :] == 1)
         agent_state_new = [agent_state_old[0][0], agent_state_old[1][0]]
         if agent_action == 0:   # Right Action Execution
             agent_state_new[1] = agent_state_old[1][0] + 1
@@ -196,8 +196,8 @@ def jit_step(action, state, num_agents, objects, wall_states):
             wall_bump[agent_id] = 1
         else:
             # Otherwise perform the state transition
-            next_state[agent_state_old[0][0], agent_state_old[1][0], agent_index] = 0
-            next_state[agent_state_new[0], agent_state_new[1], agent_index] = 1
+            next_state[agent_index, agent_state_old[0][0], agent_state_old[1][0]] = 0
+            next_state[agent_index, agent_state_new[0], agent_state_new[1]] = 1
     return next_state, wall_bump
 
 
@@ -227,13 +227,13 @@ class MultiAgentGridworldEnv(gym.Env):
 
         # Convert Art into State Array & Location Indices
         self.objects, self.state = art_to_array(self.game_art)
-        self.num_objects = self.state.shape[2]
+        self.num_objects = self.state.shape[0]
         self.wall_index = self.objects.index("#")
         self.goal_index = self.objects.index("G")
         self.subgoal_index = self.objects.index("S")
-        self.wall_states = list(zip(*np.where(self.state[:, :, self.wall_index]==1)))
-        self.goal_states = list(zip(*np.where(self.state[:, :, self.goal_index]==1)))
-        self.subgoal_states = list(zip(*np.where(self.state[:, :, self.subgoal_index]==1)))
+        self.wall_states = list(zip(*np.where(self.state[self.wall_index, :, :]==1)))
+        self.goal_states = list(zip(*np.where(self.state[self.goal_index, :, :]==1)))
+        self.subgoal_states = list(zip(*np.where(self.state[self.subgoal_index, :, :]==1)))
 
         # SET REWARD PARAMETERS
         self.wall_bump_reward = -0.05
@@ -251,13 +251,13 @@ class MultiAgentGridworldEnv(gym.Env):
         self.done = False
         self.game_art = set_agents_corner(default_maze, self.num_agents)
         self.objects, self.state = art_to_array(self.game_art)
-        self.num_objects = self.state.shape[2]
+        self.num_objects = self.state.shape[0]
         self.wall_index = self.objects.index("#")
         self.goal_index = self.objects.index("G")
         self.subgoal_index = self.objects.index("S")
 
-        self.goal_states = list(zip(*np.where(self.state[:, :, self.goal_index]==1)))
-        self.subgoal_states = list(zip(*np.where(self.state[:, :, self.subgoal_index]==1)))
+        self.goal_states = list(zip(*np.where(self.state[self.goal_index, :, :]==1)))
+        self.subgoal_states = list(zip(*np.where(self.state[self.subgoal_index, :, :]==1)))
         self.current_obs = self.state_to_obs()
         return self.current_obs
 
@@ -266,46 +266,46 @@ class MultiAgentGridworldEnv(gym.Env):
         # As in Pycolab feed different channels out!
         for agent_id in range(self.num_agents):
             agent_index = self.objects.index(str(agent_id))
-            agent_state = np.where(self.state[:, :, agent_index]==1)
+            agent_state = np.where(self.state[agent_index, :, :]==1)
             # Get "valid" observation parts
             y_start = max(0, int(agent_state[0]-(self.obs_size-1)/2))
             y_stop = min(self.grid_size[0], int(agent_state[0]+(self.obs_size-1)/2 + 1))
             x_start = max(0, int(agent_state[1]-(self.obs_size-1)/2))
             x_stop = min(self.grid_size[1], int(agent_state[1]+(self.obs_size-1)/2 + 1))
 
-            obs_temp = self.state[y_start:y_stop, x_start:x_stop, :]
+            obs_temp = self.state[:, y_start:y_stop, x_start:x_stop]
             # Figure out how much to pad where
             temp_rows_top = int(agent_state[0]-(self.obs_size-1)/2)
             if temp_rows_top < 0:
                 add_rows_top = -1*temp_rows_top
-                top_rows = np.zeros((add_rows_top, obs_temp.shape[1], self.num_objects))
+                top_rows = np.zeros((self.num_objects, add_rows_top, obs_temp.shape[2]))
                 # Make wall dimension respect "end" of env
-                top_rows[:, :, self.wall_index] = 1
-                obs_temp = np.concatenate((top_rows, obs_temp), axis=0)
+                top_rows[self.wall_index, :, :] = 1
+                obs_temp = np.concatenate((top_rows, obs_temp), axis=1)
 
             temp_rows_bottom = int(agent_state[0]+(self.obs_size-1)/2 + 1)
             if temp_rows_bottom > self.grid_size[0]:
                 add_rows_bottom = temp_rows_bottom - self.grid_size[0]
-                bottom_rows = np.zeros((add_rows_bottom, obs_temp.shape[1], self.num_objects))
+                bottom_rows = np.zeros((self.num_objects, add_rows_bottom, obs_temp.shape[2]))
                 # Make wall dimension respect "end" of env
-                bottom_rows[:, :, self.wall_index] = 1
-                obs_temp = np.concatenate((obs_temp, bottom_rows), axis=0)
+                bottom_rows[self.wall_index, :, :] = 1
+                obs_temp = np.concatenate((obs_temp, bottom_rows), axis=1)
 
             temp_cols_left = int(agent_state[1]-(self.obs_size-1)/2)
             if temp_cols_left < 0:
                 add_cols_left = -1*temp_cols_left
-                cols_left = np.zeros((obs_temp.shape[0], add_cols_left, self.num_objects))
+                cols_left = np.zeros((self.num_objects, obs_temp.shape[1], add_cols_left))
                 # Make wall dimension respect "end" of env
-                cols_left[:, :, self.wall_index] = 1
-                obs_temp = np.concatenate((cols_left, obs_temp), axis=1)
+                cols_left[self.wall_index, :, :] = 1
+                obs_temp = np.concatenate((cols_left, obs_temp), axis=2)
 
             temp_cols_right = int(agent_state[1]+(self.obs_size-1)/2 + 1)
             if temp_cols_right > self.grid_size[1]:
                 add_cols_right = temp_cols_right - self.grid_size[1]
-                cols_right = np.zeros((obs_temp.shape[0], add_cols_right, self.num_objects))
+                cols_right = np.zeros((self.num_objects, obs_temp.shape[1], add_cols_right))
                 # Make wall dimension respect "end" of env
-                cols_right[:, :, self.wall_index] = 1
-                obs_temp = np.concatenate((obs_temp, cols_right), axis=1)
+                cols_right[self.wall_index, :, :] = 1
+                obs_temp = np.concatenate((obs_temp, cols_right), axis=2)
 
             obs[agent_id] = obs_temp
         return obs
@@ -338,11 +338,11 @@ class MultiAgentGridworldEnv(gym.Env):
         # Loop over agents: Get specific rews - based on normalized activation
         for agent_id in range(self.num_agents):
             agent_index = self.objects.index(str(agent_id))
-            agent_state = np.where(self.state[:, :, agent_index] == 1)
+            agent_state = np.where(self.state[agent_index, :, :] == 1)
             agent_state = [agent_state[0][0], agent_state[1][0]]
             if tuple(agent_state) in self.subgoal_states:
                 # Delete Subgoal from list of subgoal states
-                self.state[agent_state[0], agent_state[1], self.subgoal_index] = 0
+                self.state[self.subgoal_index, agent_state[0], agent_state[1]] = 0
                 self.subgoal_states.remove(tuple(agent_state))
                 reward[agent_id] += self.subgoal_reward
             elif tuple(agent_state) in self.goal_states:
@@ -374,22 +374,22 @@ class MultiAgentGridworldEnv(gym.Env):
         # Plot the base environment
         base_idx = self.objects.index("#")
         state_temp = self.state.copy()[:, :, :]
-        background_base = state_temp[:, :, base_idx]
+        background_base = state_temp[base_idx, :, :]
 
         x, y = np.where(background_base == 0)
-        state_temp[x, y, base_idx] = 255
+        state_temp[base_idx, x, y] = 255
         x, y = np.where(background_base == 1)
-        state_temp[x, y, base_idx] = 20/255
+        state_temp[base_idx, x, y] = 20/255
 
         # Plot the base background
-        axs.imshow(state_temp[:, :, base_idx])
+        axs.imshow(state_temp[base_idx, :, :])
         axs.set_axis_off()
 
         for i, obj in enumerate(self.objects):
             if obj == "#":
                 pass
             elif obj == "G":
-                x, y = np.where(self.state[:, :, i] == 1)
+                x, y = np.where(self.state[i, :, :] == 1)
                 for j in range(len(x)):
                     axs.text(y[j], x[j],
                         "G",
@@ -398,7 +398,7 @@ class MultiAgentGridworldEnv(gym.Env):
                         bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
                         fontsize=13)
             elif obj == "S":
-                x, y = np.where(self.state[:, :, i] == 1)
+                x, y = np.where(self.state[i, :, :] == 1)
                 for j in range(len(x)):
                     axs.text(y[j], x[j],
                         "S",
@@ -407,7 +407,7 @@ class MultiAgentGridworldEnv(gym.Env):
                         bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
                         fontsize=13)
             else:
-                x, y = np.where(self.state[:, :, i] == 1)
+                x, y = np.where(self.state[i, :, :] == 1)
                 for j in range(len(x)):
                     circle = plt.Circle((y[j], x[j]), radius=0.25, color=COLOUR_FG[obj])
                     axs.add_artist(circle)
@@ -421,16 +421,16 @@ class MultiAgentGridworldEnv(gym.Env):
 
         for agent_id in range(self.num_agents):
             base_idx = self.objects.index("#")
-            background_base = obs[agent_id][:, :, base_idx]
+            background_base = obs[agent_id][base_idx, :, :]
             obs_temp = obs[agent_id].copy()[:, :, :]
 
             x, y = np.where(background_base == 0)
-            obs_temp[x, y, base_idx] = 255
+            obs_temp[base_idx, x, y] = 255
             x, y = np.where(background_base == 1)
-            obs_temp[x, y, base_idx] = 20/255
+            obs_temp[base_idx, x, y] = 20/255
 
             # Plot the base background
-            axs[agent_id].imshow(obs_temp[:, :, base_idx])
+            axs[agent_id].imshow(obs_temp[base_idx, :, :])
             axs[agent_id].set_axis_off()
             axs[agent_id].set_title("Agent: {}".format(agent_id + 1))
 
@@ -438,7 +438,7 @@ class MultiAgentGridworldEnv(gym.Env):
                 if obj == "#":
                     continue
                 elif obj == "G":
-                    x, y = np.where(obs_temp[:, :, i] == 1)
+                    x, y = np.where(obs_temp[i, :, :] == 1)
                     for j in range(len(x)):
                         axs[agent_id].text(y[j], x[j],
                             "G",
@@ -447,7 +447,7 @@ class MultiAgentGridworldEnv(gym.Env):
                             bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
                             fontsize=13)
                 elif obj == "S":
-                    x, y = np.where(obs_temp[:, :, i] == 1)
+                    x, y = np.where(obs_temp[i, :, :] == 1)
                     for j in range(len(x)):
                         axs[agent_id].text(y[j], x[j],
                             "S",
@@ -456,7 +456,7 @@ class MultiAgentGridworldEnv(gym.Env):
                             bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
                             fontsize=13)
                 else:
-                    x, y = np.where(obs_temp[:, :, i] == 1)
+                    x, y = np.where(obs_temp[i, :, :] == 1)
                     for j in range(len(x)):
                         circle = plt.Circle((y[j], x[j]), radius=0.25, color=COLOUR_FG[obj])
                         axs[agent_id].add_artist(circle)
@@ -467,22 +467,22 @@ class MultiAgentGridworldEnv(gym.Env):
         fig, axs = plt.subplots(1, 1, figsize=(12, 8))
         base_idx = self.objects.index("#")
         state_temp = self.state.copy()[:, :, :]
-        background_base = state_temp[:, :, base_idx]
+        background_base = state_temp[base_idx, :, :]
 
         x, y = np.where(background_base == 0)
-        state_temp[x, y, base_idx] = 255
+        state_temp[base_idx, x, y] = 255
         x, y = np.where(background_base == 1)
-        state_temp[x, y, base_idx] = 20/255
+        state_temp[base_idx, x, y] = 20/255
 
         # Plot the base background
-        axs.imshow(state_temp[:, :, base_idx])
+        axs.imshow(state_temp[base_idx, :, :])
         axs.set_axis_off()
 
         for i, obj in enumerate(self.objects):
             if obj == "#":
                 pass
             elif obj == "G":
-                x, y = np.where(self.state[:, :, i] == 1)
+                x, y = np.where(self.state[i, :, :] == 1)
                 for j in range(len(x)):
                     axs.text(y[j], x[j],
                         "G",
@@ -491,7 +491,7 @@ class MultiAgentGridworldEnv(gym.Env):
                         bbox=dict(facecolor=COLOUR_FG[obj], alpha=1),
                         fontsize=13)
             elif obj == "S":
-                x, y = np.where(self.state[:, :, i] == 1)
+                x, y = np.where(self.state[i, :, :] == 1)
                 for j in range(len(x)):
                     axs.text(y[j], x[j],
                         "S",
@@ -512,6 +512,6 @@ class MultiAgentGridworldEnv(gym.Env):
         state_storage = []
         for i, obj in enumerate(self.objects):
             if obj not in ["#", "G", "S"]:
-                x, y = np.where(self.state[:, :, i] == 1)
+                x, y = np.where(self.state[i, :, :] == 1)
                 state_storage.append((x, y))
         return state_storage
