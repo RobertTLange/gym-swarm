@@ -30,21 +30,46 @@ class FilterGridworldEnv(gym.Env):
                           'filter_size': 3,
                           'obs_size': 5,
                           'random_placement': False,
+                          'random_filters': False,
+                          'num_distraction_filters': 0,
                           'wall_bump_reward': -0.05,
                           'step_reward': -0.01,
                           'sparse_reward': 0,
-                          'random_seed': 1}
+                          'filter_as_obs': 0}
         self.action_space_size = 5
         self.set_env_params(default_params)
 
     def init_filters(self):
         # SAMPLE A SET OF FILTERS FOR THE AGENTS
         self.reward_filters = {}
+        self.distraction_filters = {}
+
+        if self.filter_as_obs:
+            self.padded_filters = {}
+            to_pad = (self.obs_size-self.filter_size)//2
+
         for agent_id in range(self.num_agents):
             self.reward_filters[agent_id] = np.random.randint(0, 255, self.filter_size**2).reshape((self.filter_size, self.filter_size))/255
 
+            # If filters are part of observations - store correctly padded version
+            if self.filter_as_obs:
+                self.padded_filters[agent_id] = zero_pad(self.reward_filters[agent_id],
+                                                         (self.obs_size, self.obs_size),
+                                                         (to_pad, to_pad))
+
+        for distr_id in range(self.num_distraction_filters):
+            self.distraction_filters[distr_id] = np.random.randint(0, 255, self.filter_size**2).reshape((self.filter_size, self.filter_size))/255
+
+
     def place_filters(self):
+        """ Generate the gridworld & place the sampled filters into them"""
         self.state_grid = np.zeros((self.grid_size, self.grid_size))
+
+        # Place the distraction filters in the environment
+        for distr_id in range(self.num_distraction_filters):
+            coord = np.random.randint(0, self.grid_size - self.filter_size, 2).astype(int)
+            self.state_grid[coord[0]:coord[0]+self.filter_size, coord[1]:coord[1]+self.filter_size] = self.distraction_filters[distr_id]
+
         # Place the filters in grid randomly - make sure there is no overlap
         filled_fields = []
         coords = []
@@ -60,6 +85,7 @@ class FilterGridworldEnv(gym.Env):
                     break
 
         self.optimal_locations = {}
+        # Place filters and store optimal locations
         for agent_id in range(self.num_agents):
             self.state_grid[coords[agent_id][0]:coords[agent_id][0]+self.filter_size, coords[agent_id][1]:coords[agent_id][1]+self.filter_size] = self.reward_filters[agent_id]
             self.optimal_locations[agent_id] = [int(coords[agent_id][0] + (self.filter_size-1)/2),
@@ -96,11 +122,15 @@ class FilterGridworldEnv(gym.Env):
         """
         Sample initial placement of agents & the corresponding observation
         """
-        if not self.random_placement:
-            np.random.seed(self.random_seed)
-        self.place_filters()
+        if self.random_filters:
+            self.init_filters()
+            self.place_filters()
         self.compute_reward_function()
-        self.sample_init_state()
+
+        if self.random_placement:
+            self.sample_init_state()
+        else:
+            self.current_state = self.agent_position_store.copy()
 
         # Reset "accomlishments" of the agents
         self.done = False
@@ -125,7 +155,6 @@ class FilterGridworldEnv(gym.Env):
         Transform the state into observations issued to the agents
             - obs_size x obs_size grid centered on the agent
             - Important perform the padding for the agents
-        TODO: jit this with numba!
         """
         obs = {}
         for agent_id in range(self.num_agents):
@@ -162,7 +191,11 @@ class FilterGridworldEnv(gym.Env):
                 obs_temp = np.concatenate((obs_temp,
                                            -1 + np.zeros((obs_temp.shape[0], add_cols_right))), axis=1)
 
-            obs[agent_id] = obs_temp
+            # Stack individual filter on top of observation!
+            if self.filter_as_obs:
+                obs[agent_id] = np.stack((obs_temp, self.padded_filters[agent_id]), axis=0)
+            else:
+                obs[agent_id] = obs_temp
         return obs
 
     def step(self, action):
@@ -232,14 +265,16 @@ class FilterGridworldEnv(gym.Env):
     def set_env_params(self, env_params=None, verbose=False):
         # SET INITIAL ENVIRONMENT PARAMETERS
         self.num_agents = env_params['num_agents']              # No. agents/kernels in env
-        self.grid_size = env_params['grid_size']               # Size 2d grid [0, grid_size]
+        self.grid_size = env_params['grid_size']                # Size 2d grid [0, grid_size]
         self.filter_size = env_params['filter_size']            # Assert that uneven
         self.obs_size = env_params['obs_size']                  # Obssquare centered on agent
         self.random_placement = env_params['random_placement']  # Random placement at reset
-        self.random_seed = env_params['random_seed']            # Seed for filter init/place
+        self.random_filters = env_params['random_filters']      # Seed for filter init/place
         self.wall_bump_reward = env_params['wall_bump_reward']  # Wall bump reward
         self.step_reward = env_params['step_reward']            # Step reward
         self.sparse_reward = env_params['sparse_reward']        # Sparse reward
+        self.filter_as_obs = env_params['filter_as_obs']        # Return filter as part of obs
+        self.num_distraction_filters = env_params['num_distraction_filters']
 
         # SET OBSERVATION & ACTION SPACE (5 - u, d, l, r, stay)
         self.observation_space = spaces.Box(low=0, high=self.grid_size,
@@ -248,6 +283,9 @@ class FilterGridworldEnv(gym.Env):
         self.action_space = spaces.Discrete(5)
 
         self.init_filters()
+        self.sample_init_state()
+        self.place_filters()
+        self.agent_position_store = self.current_state.copy()
 
         if verbose:
             print("Set environment parameters to:")
@@ -293,10 +331,9 @@ class FilterGridworldEnv(gym.Env):
 
     def render_obs(self, axs):
         obs = self.state_to_obs()
-
         for agent_id in range(self.num_agents):
             obs_to_plot = obs[agent_id]
-            axs[agent_id].imshow(-1*obs_to_plot, cmap="Greys", vmin=-1, vmax=1)
+            axs[agent_id].imshow(obs_to_plot, cmap="Greys", vmin=-0.4, vmax=1)
             axs[agent_id].set_axis_off()
             axs[agent_id].set_title("Agent: {}".format(agent_id + 1))
 
