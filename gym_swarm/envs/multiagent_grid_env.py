@@ -15,7 +15,7 @@ sns.set(context='poster', style='white', palette='Paired',
         font='sans-serif', font_scale=1, color_codes=True, rc=None)
 COLOURS = sns.color_palette("Set1")
 
-from numba import jit, njit
+from numba import jit
 
 
 def generate_base_art(x_dim, y_dim):

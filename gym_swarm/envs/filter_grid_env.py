@@ -12,14 +12,47 @@ sns.set(context='poster', style='white', palette='Paired',
         font='sans-serif', font_scale=1, color_codes=True, rc=None)
 COLOURS = sns.color_palette("Set1")
 
+from numba import jit
+
+
+@jit(nopython=False)
+def jit_step(action, current_state, num_agents, grid_size):
+    wall_bump = np.zeros(num_agents)
+    next_state = current_state.copy()
+
+    for agent_id in range(num_agents):
+        # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
+        agent_state = current_state[agent_id, :].copy()
+        if action[agent_id] == 0:   # Right Action Execution
+            if agent_state[1] < grid_size - 1:
+                agent_state[1] = agent_state[1] + 1
+            else:
+                wall_bump[agent_id] = 1
+        elif action[agent_id] == 1: # Left Action Execution
+            if agent_state[1] > 0:
+                agent_state[1] = agent_state[1] - 1
+            else:
+                wall_bump[agent_id] = 1
+        elif action[agent_id] == 2: # Down Action Execution
+            if agent_state[0] > 0:
+                agent_state[0] = agent_state[0] - 1
+            else:
+                wall_bump[agent_id] = 1
+        elif action[agent_id] == 3: # Up Action Execution
+            if agent_state[0] < grid_size - 1:
+                agent_state[0] = agent_state[0] + 1
+            else:
+                wall_bump[agent_id] = 1
+        next_state[agent_id] = agent_state
+
+    return next_state, wall_bump
+
 
 class FilterGridworldEnv(gym.Env):
     """
     Learning to Communicate Filter Positions
     TODO: Make it possible to load in parts of image & equip agents with filters
     TODO: Add a bunch of assert statements that make sure filter are uneven, etc.
-    TODO: Allow for sampling of walls
-    TODO: jit functions for speedup
     """
     # metadata = {'render.modes': ['human']}
 
@@ -59,7 +92,6 @@ class FilterGridworldEnv(gym.Env):
 
         for distr_id in range(self.num_distraction_filters):
             self.distraction_filters[distr_id] = np.random.randint(0, 255, self.filter_size**2).reshape((self.filter_size, self.filter_size))/255
-
 
     def place_filters(self):
         """ Generate the gridworld & place the sampled filters into them"""
@@ -205,38 +237,16 @@ class FilterGridworldEnv(gym.Env):
         if self.done:
             raise RuntimeError("Episode has finished. Call env.reset() to start a new episode.")
 
+        action = np.array(list(action.values()))
+        current_state = np.array(list(self.current_state.values()))
         # Update state of env and obs distributed to agents
-        wall_bump = {i: 0 for i in range(self.num_agents)}
-        next_state = {}
-        for agent_id, agent_action in action.items():
-            # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
-            agent_state = self.current_state[agent_id].copy()
-            if agent_action == 0:   # Right Action Execution
-                if agent_state[1] < self.grid_size - 1:
-                    agent_state[1] +=1
-                else:
-                    wall_bump[agent_id] = 1
-            elif agent_action == 1: # Left Action Execution
-                if agent_state[1] > 0:
-                    agent_state[1] -=1
-                else:
-                    wall_bump[agent_id] = 1
-            elif agent_action == 2: # Down Action Execution
-                if agent_state[0] > 0:
-                    agent_state[0] -=1
-                else:
-                    wall_bump[agent_id] = 1
-            elif agent_action == 3: # Up Action Execution
-                if agent_state[0] < self.grid_size - 1:
-                    agent_state[0] +=1
-                else:
-                    wall_bump[agent_id] = 1
-            next_state[agent_id] = agent_state
+        next_state, wall_bump = jit_step(action, current_state,
+                                         self.num_agents, self.grid_size)
 
-        self.current_state = next_state
-        self.current_obs = self.state_to_obs()
+        self.current_state = {i: next_state[i, :] for i in range(next_state.shape[0])}
         # Calculate the reward based on the transition and return meta info
         reward, self.done = self.state_reward(wall_bump)
+        self.current_obs = self.state_to_obs()
         info = {"warnings": None}
         return self.current_obs, reward, self.done, info
 
