@@ -6,6 +6,8 @@ import os
 import pprint
 import math
 import itertools
+from collections import defaultdict
+
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,7 +15,7 @@ sns.set(context='poster', style='white', palette='Paired',
         font='sans-serif', font_scale=1, color_codes=True, rc=None)
 COLOURS = sns.color_palette("Set1")
 
-from numba import jit
+from numba import jit, njit
 
 
 def generate_base_art(x_dim, y_dim):
@@ -104,15 +106,25 @@ def set_agents_corner(current_art, num_agents):
     return maze_w_players
 
 
-def art_to_array(game_art):
+def art_to_array(game_art, num_agents):
     # Create a state array on which to act on!
     all_elements = set()
     for i in range(len(game_art)):
         temp = set(game_art[i])
         all_elements = all_elements | temp
-    objects = list(all_elements)
-    objects.remove(" ")
+    obj = list(all_elements)
+    obj.remove(" ")
 
+    agent_ids = []
+    object_types = []
+    for x in obj:
+        try:
+            int_temp = int(x)
+            agent_ids.append(x)
+        except:
+            object_types.append(x)
+
+    objects = agent_ids + object_types
     y_dim = len(game_art[0])
     x_dim = len(game_art)
     state_array = np.zeros((len(objects), x_dim, y_dim))
@@ -172,15 +184,29 @@ default_maze = ["###################################",
                 "#####                    #      GG#",
                 "###################################"]
 
-# @jit(nopython=False)
+
+# 25x35x6 Base Maze Gridworld for the Fish Environment
+subtask_maze = ["###################################",
+                "#           #                     #",
+                "#           #                     #",
+                "#           #                     #",
+                "#       #####   #############   GS#",
+                "#               #############   SS#",
+                "###################################"]
+
+@jit(nopython=False)
 def jit_step(action, state, num_agents, objects, wall_states):
     wall_bump = np.zeros(num_agents)
     next_state = state.copy()
-    for agent_id, agent_action in action.items():
+
+    for agent_id in range(num_agents):
         # 0 - R, 1 - L, 2 - D, 3 - U, 4 - S
-        agent_index = objects.index(str(agent_id))
-        agent_state_old = np.where(state[agent_index, :, :] == 1)
-        agent_state_new = [agent_state_old[0][0], agent_state_old[1][0]]
+        # Previously: Agent index had to be extracted from list of objects
+        # Problem: Incompatible with Numba
+        # agent_index = objects.index(str(agent_id))
+        agent_state_old = np.where(state[agent_id, :, :] == 1)
+        agent_state_new = np.array([agent_state_old[0][0], agent_state_old[1][0]])
+        agent_action = action[agent_id]
         if agent_action == 0:   # Right Action Execution
             agent_state_new[1] = agent_state_old[1][0] + 1
         elif agent_action == 1: # Left Action Execution
@@ -191,15 +217,15 @@ def jit_step(action, state, num_agents, objects, wall_states):
             agent_state_new[0] = agent_state_old[0][0] + 1
         # If agent_action is 4 don't do anything
 
-        if tuple(agent_state_new) in wall_states:
-            # Agent bumped into wall - revert/dont update & track index/bump!
-            wall_bump[agent_id] = 1
-        else:
+        for row_id in range(wall_states.shape[0]):
+            if (agent_state_new == wall_states[row_id, :]).all():
+                wall_bump[agent_id] = 1
+                break
+        if wall_bump[agent_id] < 1:
             # Otherwise perform the state transition
-            next_state[agent_index, agent_state_old[0][0], agent_state_old[1][0]] = 0
-            next_state[agent_index, agent_state_new[0], agent_state_new[1]] = 1
+            next_state[agent_id, agent_state_old[0][0], agent_state_old[1][0]] = 0
+            next_state[agent_id, agent_state_new[0], agent_state_new[1]] = 1
     return next_state, wall_bump
-
 
 
 class MultiAgentGridworldEnv(gym.Env):
@@ -216,6 +242,8 @@ class MultiAgentGridworldEnv(gym.Env):
         self.random_placement = random_placement  # Random placement at reset
         self.done = None
         self.sample_env = sample_env
+        self.maze = default_maze
+        self.train_subtask = False
 
         if self.sample_env:
             maze_art = generate_base_art(self.grid_size[0], self.grid_size[1])
@@ -223,10 +251,10 @@ class MultiAgentGridworldEnv(gym.Env):
             self.game_art = sample_players_initial_state(maze_w_walls,
                                                          num_agents=self.num_agents)
         else:
-            self.game_art = set_agents_corner(default_maze, self.num_agents)
+            self.game_art = set_agents_corner(self.maze, self.num_agents)
 
         # Convert Art into State Array & Location Indices
-        self.objects, self.state = art_to_array(self.game_art)
+        self.objects, self.state = art_to_array(self.game_art, self.num_agents)
         self.num_objects = self.state.shape[0]
         self.wall_index = self.objects.index("#")
         self.goal_index = self.objects.index("G")
@@ -249,15 +277,19 @@ class MultiAgentGridworldEnv(gym.Env):
         - Reset the goal locations!
         """
         self.done = False
-        self.game_art = set_agents_corner(default_maze, self.num_agents)
-        self.objects, self.state = art_to_array(self.game_art)
+        if self.train_subtask:
+            self.maze = subtask_maze
+        self.game_art = set_agents_corner(self.maze, self.num_agents)
+        self.objects, self.state = art_to_array(self.game_art, self.num_agents)
         self.num_objects = self.state.shape[0]
         self.wall_index = self.objects.index("#")
         self.goal_index = self.objects.index("G")
         self.subgoal_index = self.objects.index("S")
 
+        self.wall_states = list(zip(*np.where(self.state[self.wall_index, :, :]==1)))
         self.goal_states = list(zip(*np.where(self.state[self.goal_index, :, :]==1)))
         self.subgoal_states = list(zip(*np.where(self.state[self.subgoal_index, :, :]==1)))
+
         self.current_obs = self.state_to_obs()
         return self.current_obs
 
@@ -318,27 +350,26 @@ class MultiAgentGridworldEnv(gym.Env):
             raise RuntimeError("Episode has finished. Call env.reset() to start a new episode.")
 
         # Update state of env and obs distributed to agents
+        action = np.array(list(action.values()))
+        objects = np.array(self.objects)
+        wall_states = np.array(self.wall_states)
         self.state, wall_bump = jit_step(action, self.state, self.num_agents,
-                                         self.objects, self.wall_states)
+                                         objects, wall_states)
 
-        self.current_obs = self.state_to_obs()
         # Calculate the reward based on the transition and return meta info
         reward, self.done = self.state_reward(wall_bump)
+        self.current_obs = self.state_to_obs()
         info = {"warnings": None}
         return self.current_obs, reward, self.done, info
 
     def state_reward(self, wall_bump):
-        """
-        Agent-specific rewards given by activation of filters
-        """
-        # NOTE: Decide in learning loop whether to aggregate to global signal
+        """ Agent-specific rewards given by activation of filters """
         done = False
         reward = {i: 0 for i in range(self.num_agents)}
 
         # Loop over agents: Get specific rews - based on normalized activation
         for agent_id in range(self.num_agents):
-            agent_index = self.objects.index(str(agent_id))
-            agent_state = np.where(self.state[agent_index, :, :] == 1)
+            agent_state = np.where(self.state[agent_id, :, :] == 1)
             agent_state = [agent_state[0][0], agent_state[1][0]]
             if tuple(agent_state) in self.subgoal_states:
                 # Delete Subgoal from list of subgoal states
@@ -360,6 +391,7 @@ class MultiAgentGridworldEnv(gym.Env):
         self.wall_bump_reward = env_params['wall_bump_reward']    # Wall bump reward
         self.subgoal_reward = env_params['subgoal_reward']        # Subgoal bump reward
         self.final_goal_reward = env_params['final_goal_reward']  # Final goal bump reward
+        self.train_subtask = env_params['train_subtask']
 
         if verbose:
             print("Set environment parameters to:")

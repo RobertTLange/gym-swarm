@@ -292,7 +292,7 @@ class FilterGridworldEnv(gym.Env):
             pprint.pprint(env_params)
         return
 
-    def render(self, axs):
+    def render(self, axs, title="Environment State"):
         """
         Render the environment state
         """
@@ -318,7 +318,7 @@ class FilterGridworldEnv(gym.Env):
                 horizontalalignment="right",
                 verticalalignment="top",
                 fontsize=11)
-        axs.set_title("Environment State")
+        axs.set_title(title)
         axs.set_axis_off()
         return
 
@@ -375,7 +375,7 @@ def zero_pad(array, ref_shape, offsets):
     # Create a list of slices from offset to offset + shape in each dimension
     insertHere = [slice(offsets[dim], offsets[dim] + array.shape[dim]) for dim in range(array.ndim)]
     # Insert the array in the result at the specified offsets
-    result[insertHere] = array
+    result[tuple(insertHere)] = array
     return result
 
 def frame_image(img, frame_width):
